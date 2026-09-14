@@ -40,6 +40,7 @@ out/
 .env
 .env.*
 !.env.example
+.claude.local.md
 
 # Local Google login test configuration
 tools/google-login-test/config.js
