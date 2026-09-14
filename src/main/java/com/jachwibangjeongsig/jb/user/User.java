@@ -44,7 +44,7 @@ public class User extends BaseTimeEntity {
 	@Column(nullable = false, length = 255)
 	private String email;
 
-	@Column(nullable = false, length = 50)
+	@Column(length = 50)
 	private String nickname;
 
 	@Enumerated(EnumType.STRING)
@@ -58,5 +58,9 @@ public class User extends BaseTimeEntity {
 		this.email = email;
 		this.nickname = nickname;
 		this.role = role == null ? UserRole.USER : role;
+	}
+
+	public void updateEmail(String email) {
+		this.email = email;
 	}
 }
