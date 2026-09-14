@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JB Google 로그인 테스트</title>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="./config.js"></script>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { max-width: 720px; margin: 64px auto; padding: 0 20px; color: #202124; }
+    .card { border: 1px solid #dadce0; border-radius: 16px; padding: 24px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0; }
+    button { padding: 10px 14px; border: 1px solid #dadce0; border-radius: 8px; background: white; cursor: pointer; }
+    button:hover { background: #f8f9fa; }
+    pre { min-height: 180px; overflow: auto; padding: 16px; border-radius: 10px; background: #f6f8fa; white-space: pre-wrap; word-break: break-word; }
+    .hint { color: #5f6368; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>JB Google 로그인 테스트</h1>
+  <div class="card">
+    <p>Google 계정을 선택하면 받은 ID Token을 로컬 백엔드로 전송합니다.</p>
+    <div id="google-button"></div>
+    <div class="actions">
+      <button type="button" id="reissue">토큰 재발급</button>
+      <button type="button" id="logout">로그아웃</button>
+      <button type="button" id="clear">결과 지우기</button>
+    </div>
+    <p class="hint">Refresh Token은 HttpOnly 쿠키라 이 화면이나 JavaScript에서 보이지 않는 것이 정상입니다.</p>
+    <pre id="result">준비 중...</pre>
+  </div>
+
+  <script>
+    const CLIENT_ID = window.JB_GOOGLE_CLIENT_ID;
+    const API_BASE = "http://localhost:8080";
+    const result = document.querySelector("#result");
+
+    function show(label, value) {
+      result.textContent = `${label}\n${typeof value === "string" ? value : JSON.stringify(value, null, 2)}`;
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        credentials: "include",
+        ...options,
+      });
+      const body = response.status === 204 ? null : await response.json().catch(() => null);
+      show(`${response.status} ${response.statusText}`, body);
+      return { response, body };
+    }
+
+    window.onload = () => {
+      google.accounts.id.initialize({
+        client_id: CLIENT_ID,
+        callback: ({ credential }) => request("/api/auth/login/google", {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken: credential }),
+        }).catch(error => show("로그인 요청 실패", error.message)),
+      });
+      google.accounts.id.renderButton(document.querySelector("#google-button"), {
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        locale: "ko",
+      });
+      show("준비 완료", "Google 로그인 버튼을 눌러주세요.");
+    };
+
+    document.querySelector("#reissue").addEventListener("click", () =>
+      request("/api/auth/reissue").catch(error => show("재발급 요청 실패", error.message))
+    );
+    document.querySelector("#logout").addEventListener("click", () =>
+      request("/api/logout").catch(error => show("로그아웃 요청 실패", error.message))
+    );
+    document.querySelector("#clear").addEventListener("click", () => show("", ""));
+  </script>
+</body>
+</html>
