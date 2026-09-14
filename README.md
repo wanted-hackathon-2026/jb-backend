@@ -7,10 +7,10 @@
 
 ## 기술 스택
 
-| | |
-|---|---|
+| 카테고리 | 설명 |
+| --- | --- |
 | 언어/런타임 | Java 25 |
-| 프레임워크 | Spring Boot 4.1.1 (Web MVC, Data JPA, Security, Actuator) |
+| 프레임워크 | Spring Boot 4.1.1 |
 | DB | MySQL 8.4 + Flyway |
 | 문서화 | springdoc-openapi 3 (Swagger UI) |
 | 배포 | GitHub Actions → GHCR → EC2 (Docker Compose) |
@@ -34,7 +34,7 @@ Flyway가 기동 시 마이그레이션을 적용하므로 별도 스키마 작�
 `.env.example`에 전체 목록과 설명이 있다. 기본값이 없는 값들이라 누락되면 기동에 실패한다.
 
 | 키 | 설명 |
-|---|---|
+| --- | --- |
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | 데이터소스 |
 | `GOOGLE_CLIENT_ID` | 구글 로그인 ID 토큰 검증용 |
 | `AUTH_ACCESS_TOKEN_SECRET` / `AUTH_REFRESH_TOKEN_SECRET` | JWT 서명 키. 각각 32바이트 이상, 서로 다른 값 |
@@ -55,26 +55,13 @@ Flyway가 기동 시 마이그레이션을 적용하므로 별도 스키마 작�
 전체 명세는 Swagger UI에서 확인한다. 인증 관련 엔드포인트는 다음과 같다.
 
 | 메서드 | 경로 | 설명 |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/auth/login/google` | 구글 ID 토큰으로 로그인, 액세스 토큰 발급 + refresh 쿠키 설정 |
 | POST | `/api/auth/reissue` | refresh 쿠키로 액세스 토큰 재발급 |
 | POST | `/api/logout` | refresh 세션 폐기 및 쿠키 만료 |
 
 그 외 요청은 인증이 필요하다. 액세스 토큰은 `Authorization: Bearer <token>`으로 보낸다.
 공개 엔드포인트를 추가할 때는 `AuthConfig`의 `securityFilterChain`에 permitAll을 함께 등록해야 한다.
-
-## 프로젝트 구조
-
-```
-src/main/java/com/jachwibangjeongsig/jb/
-├── auth/                 인증 (구글 로그인, JWT, refresh 세션)
-│   ├── config/           SecurityFilterChain, CORS, JwtDecoder
-│   ├── controller/ dto/ entity/ repository/ service/ exception/
-├── user/                 사용자 도메인
-└── global/               공통 설정, 베이스 엔티티
-
-src/main/resources/db/migration/    Flyway 마이그레이션 (V1~)
-```
 
 ## 배포
 
