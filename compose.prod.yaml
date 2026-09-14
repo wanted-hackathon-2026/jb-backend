@@ -2,12 +2,13 @@ services:
   app:
     image: ${APP_IMAGE}
     environment:
-      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME}
-      DB_USERNAME: ${DB_USER}
-      DB_PASSWORD: ${DB_PW}
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       AUTH_ACCESS_TOKEN_SECRET: ${AUTH_ACCESS_TOKEN_SECRET}
       AUTH_REFRESH_TOKEN_SECRET: ${AUTH_REFRESH_TOKEN_SECRET}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
     ports:
@@ -21,9 +22,9 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PW}
+      MYSQL_DATABASE: jb
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PW}
     command:
       - --character-set-server=utf8mb4
