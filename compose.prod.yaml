@@ -1,6 +1,7 @@
 services:
   app:
-    image: ${APP_IMAGE}
+    # 배포 워크플로우가 커밋 SHA를 넘김. 서버에서 수동 실행할 땐 latest로 폴백.
+    image: ${APP_IMAGE:-ghcr.io/wanted-hackathon-2026/jb-backend:latest}
     environment:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
