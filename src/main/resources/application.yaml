@@ -35,3 +35,6 @@ auth:
   refresh-token-secret: ${AUTH_REFRESH_TOKEN_SECRET}
   cookie-secure: ${AUTH_COOKIE_SECURE:true}
   allowed-origins: ${AUTH_ALLOWED_ORIGINS:http://localhost:3000}
+
+vworld:
+  api-key: ${VWORLD_API_KEY}
