@@ -42,3 +42,7 @@ vworld:
 llm:
   api-key: ${OPENROUTER_API_KEY}
   model: ${LLM_MODEL}
+
+swagger:
+  google-login:
+    enabled: ${SWAGGER_GOOGLE_LOGIN_ENABLED:false}

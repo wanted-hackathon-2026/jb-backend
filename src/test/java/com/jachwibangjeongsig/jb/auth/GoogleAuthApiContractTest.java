@@ -36,6 +36,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -43,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
+	"swagger.google-login.enabled=false",
 	"auth.google-client-id=test-google-client-id",
 	"auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
 	"auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
@@ -77,6 +79,24 @@ class GoogleAuthApiContractTest {
 	@BeforeEach
 	void cleanDatabase() {
 		userRepository.deleteAll();
+	}
+
+	@Test
+	void swaggerRemainsPublicWithoutGoogleLoginWhenDisabled() throws Exception {
+		mockMvc.perform(get("/swagger-ui/index.html"))
+			.andExpect(status().isOk())
+			.andExpect(content().string(org.hamcrest.Matchers.not(
+				org.hamcrest.Matchers.containsString("swagger-google-login")
+			)));
+		MvcResult result = mockMvc.perform(get("/v3/api-docs"))
+			.andExpect(status().isOk()).andReturn();
+		JsonNode spec = objectMapper.readTree(result.getResponse().getContentAsString());
+		assertThat(spec.path("security").get(0).has("bearerAuth")).isTrue();
+		for (String path : List.of("/api/auth/login/google", "/api/auth/reissue", "/api/logout")) {
+			JsonNode security = spec.path("paths").path(path).path("post").path("security");
+			assertThat(security.isArray()).isTrue();
+			assertThat(security.isEmpty()).isTrue();
+		}
 	}
 
 	@Test

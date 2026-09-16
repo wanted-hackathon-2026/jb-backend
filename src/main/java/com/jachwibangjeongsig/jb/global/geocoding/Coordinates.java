@@ -1,4 +1,4 @@
-package com.jachwibangjeongsig.jb.workplace.dto;
+package com.jachwibangjeongsig.jb.global.geocoding;
 
 public record Coordinates(double lat, double lng) {
 }

@@ -1,6 +1,7 @@
 package com.jachwibangjeongsig.jb.workplace.exception;
 
 import com.jachwibangjeongsig.jb.auth.exception.AuthProblemDetails;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.jachwibangjeongsig.jb.workplace.controller")
 public class WorkplaceExceptionHandler {
 
 	@ExceptionHandler(AddressNotGeocodableException.class)

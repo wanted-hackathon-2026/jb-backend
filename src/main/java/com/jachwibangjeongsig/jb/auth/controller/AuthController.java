@@ -10,6 +10,7 @@ import com.jachwibangjeongsig.jb.auth.exception.InvalidRefreshTokenException;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 
 @RestController
+@SecurityRequirements
 public class AuthController {
 
 	private static final String REFRESH_TOKEN_COOKIE = "refresh_token";

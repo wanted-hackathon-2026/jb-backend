@@ -1,8 +1,8 @@
 package com.jachwibangjeongsig.jb.workplace;
 
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
-import com.jachwibangjeongsig.jb.workplace.service.GeocodingClient;
-import com.jachwibangjeongsig.jb.workplace.service.VWorldGeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.VWorldGeocodingClient;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;

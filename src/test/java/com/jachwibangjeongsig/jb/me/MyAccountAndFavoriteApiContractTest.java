@@ -175,6 +175,7 @@ class MyAccountAndFavoriteApiContractTest {
             .andExpect(jsonPath("$.content[0].property.address").value("지번 주소"))
             .andExpect(jsonPath("$.content[0].property.roadAddress").value("도로명 주소"))
             .andExpect(jsonPath("$.content[0].property.propertyType").value("원룸"))
+            .andExpect(jsonPath("$.content[0].property.leaseType").value("MONTHLY"))
             .andExpect(jsonPath("$.content[0].property.deposit").value(1000))
             .andExpect(jsonPath("$.content[0].property.monthlyRent").value(50))
             .andExpect(jsonPath("$.content[0].property.exclusiveArea").value(23.5))
@@ -216,6 +217,7 @@ class MyAccountAndFavoriteApiContractTest {
             .andExpect(jsonPath("$.property.sggCode").value("11680"))
             .andExpect(jsonPath("$.property.umdName").value("역삼동"))
             .andExpect(jsonPath("$.property.propertyType").value("원룸"))
+            .andExpect(jsonPath("$.property.leaseType").value("MONTHLY"))
             .andExpect(jsonPath("$.property.floor").value(3))
             .andExpect(jsonPath("$.property.totalFloors").value(10))
             .andExpect(jsonPath("$.property.buildYear").value(2020))
@@ -359,10 +361,10 @@ class MyAccountAndFavoriteApiContractTest {
         UUID id = UUID.randomUUID();
         jdbc.update("""
             INSERT INTO property (id, name, address, road_address, sgg_code, umd_name, lat, lng,
-                property_type, deposit, monthly_rent, exclusive_area, floor, total_floors, build_year,
+                property_type, lease_type, deposit, monthly_rent, exclusive_area, floor, total_floors, build_year,
                 direction, description, created_at, updated_at)
             VALUES (?, ?, '지번 주소', '도로명 주소', '11680', '역삼동', 37.1234, 127.1234,
-                '원룸', 1000, 50, 23.5, 3, 10, 2020, '남향', '매물 설명',
+                '원룸', 'MONTHLY', 1000, 50, 23.5, 3, 10, 2020, '남향', '매물 설명',
                 '2026-09-16 12:00:00', '2026-09-16 12:00:00')
             """, binary(id), name);
         return id;
