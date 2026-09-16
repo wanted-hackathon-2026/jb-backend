@@ -5,16 +5,17 @@ import com.jachwibangjeongsig.jb.auth.exception.AuthProblemDetails;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
 
 @RestControllerAdvice
 public class WorkplaceExceptionHandler {
 
 	@ExceptionHandler(AddressNotGeocodableException.class)
-	ResponseEntity<ProblemDetail> notGeocodable(
+	ResponseEntity<Map<String, Object>> notGeocodable(
 		AddressNotGeocodableException exception,
 		HttpServletRequest request
 	) {
@@ -27,7 +28,7 @@ public class WorkplaceExceptionHandler {
 	}
 
 	@ExceptionHandler(GeocodingUnavailableException.class)
-	ResponseEntity<ProblemDetail> unavailable(
+	ResponseEntity<Map<String, Object>> unavailable(
 		GeocodingUnavailableException exception,
 		HttpServletRequest request
 	) {
@@ -39,7 +40,7 @@ public class WorkplaceExceptionHandler {
 		);
 	}
 
-	private ResponseEntity<ProblemDetail> response(
+	private ResponseEntity<Map<String, Object>> response(
 		HttpStatus status,
 		String code,
 		String detail,
@@ -47,6 +48,6 @@ public class WorkplaceExceptionHandler {
 	) {
 		return ResponseEntity.status(status)
 			.contentType(MediaType.APPLICATION_PROBLEM_JSON)
-			.body(AuthProblemDetails.create(status, code, detail, request));
+			.body(AuthProblemDetails.response(status, code, detail, request));
 	}
 }
