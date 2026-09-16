@@ -40,7 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "auth.google-client-id=test-google-client-id",
     "auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
     "auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
-    "vworld.api-key=test-vworld-api-key"
+    "vworld.api-key=test-vworld-api-key",
+    "llm.api-key=test-openrouter-api-key",
+    "llm.model=test-model"
 })
 @AutoConfigureMockMvc
 @Testcontainers
