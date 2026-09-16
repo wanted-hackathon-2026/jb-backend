@@ -1,7 +1,5 @@
-package com.jachwibangjeongsig.jb.workplace.service;
+package com.jachwibangjeongsig.jb.global.geocoding;
 
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
-import com.jachwibangjeongsig.jb.workplace.exception.GeocodingUnavailableException;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;

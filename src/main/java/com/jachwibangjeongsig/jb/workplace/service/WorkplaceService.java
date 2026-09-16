@@ -1,6 +1,7 @@
 package com.jachwibangjeongsig.jb.workplace.service;
 
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
 import com.jachwibangjeongsig.jb.workplace.exception.AddressNotGeocodableException;
 import com.jachwibangjeongsig.jb.workplace.dto.WorkplaceCreateRequest;
 import com.jachwibangjeongsig.jb.workplace.entity.Workplace;
