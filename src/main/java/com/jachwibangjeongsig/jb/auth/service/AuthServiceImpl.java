@@ -7,7 +7,6 @@ import com.jachwibangjeongsig.jb.auth.exception.InvalidRefreshTokenException;
 import com.jachwibangjeongsig.jb.auth.repository.RefreshTokenSessionRepository;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
-import com.jachwibangjeongsig.jb.user.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
 
 	@Override
 	@Transactional
-	public synchronized LoginResult loginWithGoogle(String idToken) {
+	public LoginResult loginWithGoogle(String idToken) {
 		GoogleIdentity identity = googleIdentityVerifier.verify(idToken);
 		UserLookup lookup = findOrCreateGoogleUser(identity);
 		User user = lookup.user();
@@ -82,18 +81,13 @@ public class AuthServiceImpl implements AuthService {
 	}
 
 	private UserLookup findOrCreateGoogleUser(GoogleIdentity identity) {
-		return userRepository.findByProviderAndProviderId(GOOGLE, identity.providerId())
-			.map(user -> new UserLookup(user, false))
-			.orElseGet(() -> {
-				User created = userRepository.saveAndFlush(User.builder()
-					.provider(GOOGLE)
-					.providerId(identity.providerId())
-					.email(identity.email())
-					.nickname(null)
-					.role(UserRole.USER)
-					.build());
-				return new UserLookup(created, true);
-			});
+		// The unique provider identity serializes only logins for the same account,
+		// including requests handled by different application instances.
+		UUID candidateId = UUID.randomUUID();
+		userRepository.insertGoogleUserIfAbsent(candidateId, identity.providerId(), identity.email(),
+			LocalDateTime.now(ZoneOffset.UTC));
+		User user = userRepository.findByProviderAndProviderId(GOOGLE, identity.providerId()).orElseThrow();
+		return new UserLookup(user, user.getId().equals(candidateId));
 	}
 
 	private IssuedTokens issueTokens(User user, UUID familyId) {

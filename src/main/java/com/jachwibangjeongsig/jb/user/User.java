@@ -19,6 +19,7 @@ import java.util.UUID;
 
 @Getter
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(
 	name = "users",
 	uniqueConstraints = @UniqueConstraint(
