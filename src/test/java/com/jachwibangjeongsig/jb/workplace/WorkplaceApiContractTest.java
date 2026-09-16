@@ -4,11 +4,11 @@ import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
 import com.jachwibangjeongsig.jb.user.UserRole;
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
 import com.jachwibangjeongsig.jb.workplace.entity.Workplace;
-import com.jachwibangjeongsig.jb.workplace.exception.GeocodingUnavailableException;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 import com.jachwibangjeongsig.jb.workplace.repository.WorkplaceRepository;
-import com.jachwibangjeongsig.jb.workplace.service.GeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

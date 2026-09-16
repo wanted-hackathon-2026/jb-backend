@@ -1,6 +1,7 @@
 package com.jachwibangjeongsig.jb.workplace.exception;
 
 import com.jachwibangjeongsig.jb.auth.exception.AuthProblemDetails;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
