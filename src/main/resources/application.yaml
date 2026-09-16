@@ -38,3 +38,7 @@ auth:
 
 vworld:
   api-key: ${VWORLD_API_KEY}
+
+swagger:
+  google-login:
+    enabled: ${SWAGGER_GOOGLE_LOGIN_ENABLED:false}

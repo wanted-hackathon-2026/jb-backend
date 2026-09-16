@@ -37,16 +37,35 @@ Flyway가 기동 시 마이그레이션을 적용하므로 별도 스키마 작�
 | --- | --- |
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | 데이터소스 |
 | `GOOGLE_CLIENT_ID` | 구글 로그인 ID 토큰 검증용 |
+| `SWAGGER_GOOGLE_LOGIN_ENABLED` | 로컬·개발 Swagger 구글 로그인 버튼 활성화. 기본 `false`, 운영에서는 끄기 |
 | `AUTH_ACCESS_TOKEN_SECRET` / `AUTH_REFRESH_TOKEN_SECRET` | JWT 서명 키. 각각 32바이트 이상, 서로 다른 값 |
 | `AUTH_COOKIE_SECURE` | refresh 토큰 쿠키의 Secure 속성. HTTP 환경에서만 `false` |
 | `AUTH_ALLOWED_ORIGINS` | 인증 요청을 허용할 프론트엔드 오리진 (쉼표 구분) |
 | `VWORLD_API_KEY` | 거점·매물의 도로명주소를 WGS84 좌표로 변환하는 VWorld API 키 |
+
+### Swagger에서 구글 로그인
+
+로컬·개발 환경의 `.env`에서 `SWAGGER_GOOGLE_LOGIN_ENABLED=true`로 설정하고 앱을 재시작한다.
+Google Console의 웹 OAuth Client ID에 **Authorized JavaScript origins**로
+`http://localhost`와 `http://localhost:8080`을 추가한다. 개발 서버는 실제 HTTPS Origin을 추가한다.
+Swagger와 서버는 같은 Origin을 사용하므로 `AUTH_ALLOWED_ORIGINS`에 Swagger 주소를 추가할 필요는 없다.
+로컬 HTTP에서는 `AUTH_COOKIE_SECURE=false`, HTTPS 개발 환경에서는 `true`를 사용한다.
+
+기존 `/swagger-ui/index.html`에서 구글 로그인 버튼을 누르면 서버 JWT가 자동으로 Authorize에 등록된다.
+토큰은 메모리에만 유지하며 새로고침하거나 15분이 지나면 다시 로그인한다. 자동 재발급은 하지 않는다.
+로그아웃 버튼은 서버 Refresh Token 세션과 Swagger 인증을 해제한다. 수동 Authorize도 계속 사용할 수 있다.
+최초 로그인은 기존 정책대로 사용자 가입이 진행되며 관리자 권한을 부여하지 않는다.
+기능을 끄면 기존 Swagger 화면만 제공하고 Google 스크립트를 로드하지 않는다.
+
+구글 Client ID는 브라우저에 전달되는 공개 식별자이며 JWT 서명 키와 토큰은 소스나 로그에 남기지 않는다.
+별도 Client Secret이나 OAuth 리다이렉트 콜백 API는 필요하지 않다.
 
 ## 빌드와 테스트
 
 ```bash
 ./gradlew build      # 컴파일 + 테스트
 ./gradlew bootJar    # 실행 가능한 jar만
+node --test src/test/js/*.test.cjs # Swagger 로그인 UI 로직 (Node.js 24, 추가 패키지 없음)
 ```
 
 테스트는 Testcontainers로 MySQL 컨테이너를 띄우므로 Docker가 실행 중이어야 한다.
