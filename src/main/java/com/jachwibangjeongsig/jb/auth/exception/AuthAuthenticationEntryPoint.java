@@ -29,14 +29,9 @@ public class AuthAuthenticationEntryPoint implements AuthenticationEntryPoint {
 	) throws IOException, ServletException {
 		response.setStatus(HttpStatus.UNAUTHORIZED.value());
 		response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-		objectMapper.writeValue(
-			response.getOutputStream(),
-			AuthProblemDetails.create(
-				HttpStatus.UNAUTHORIZED,
-				"INVALID_ACCESS_TOKEN",
-				"인증에 실패했습니다.",
-				request
-			)
-		);
+		// The security filter writes directly, outside MVC's ProblemDetail serializer.
+		objectMapper.writeValue(response.getOutputStream(), AuthProblemDetails.response(
+			HttpStatus.UNAUTHORIZED, "INVALID_ACCESS_TOKEN", "인증에 실패했습니다.", request
+		));
 	}
 }

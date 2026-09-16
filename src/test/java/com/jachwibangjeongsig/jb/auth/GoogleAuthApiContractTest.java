@@ -110,6 +110,27 @@ class GoogleAuthApiContractTest {
 	}
 
 	@Test
+	void concurrentFirstLoginsCreateExactlyOneUserAndBothSucceed() throws Exception {
+		var start = new java.util.concurrent.CountDownLatch(1);
+		try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+			java.util.concurrent.Callable<JsonNode> request = () -> {
+				assertThat(start.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+				return objectMapper.readTree(login(NEW_USER_TOKEN)
+					.andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+			};
+			var first = executor.submit(request);
+			var second = executor.submit(request);
+			start.countDown();
+			JsonNode a = first.get(20, java.util.concurrent.TimeUnit.SECONDS);
+			JsonNode b = second.get(20, java.util.concurrent.TimeUnit.SECONDS);
+			assertThat(a.get("user").get("id").asText()).isEqualTo(b.get("user").get("id").asText());
+			assertThat(java.util.List.of(a.get("isNewUser").asBoolean(), b.get("isNewUser").asBoolean()))
+				.containsExactlyInAnyOrder(true, false);
+			assertThat(userRepository.count()).isEqualTo(1);
+		}
+	}
+
+	@Test
 	void returningGoogleLoginKeepsIdentityAndNicknameButUpdatesEmail() throws Exception {
 		User existingUser = userRepository.save(User.builder()
 			.provider("google")
