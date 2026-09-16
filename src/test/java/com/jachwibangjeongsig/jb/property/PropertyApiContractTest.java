@@ -1,0 +1,450 @@
+package com.jachwibangjeongsig.jb.property;
+
+import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
+import com.jachwibangjeongsig.jb.property.entity.Property;
+import com.jachwibangjeongsig.jb.property.entity.LeaseType;
+import com.jachwibangjeongsig.jb.property.repository.PropertyRepository;
+import com.jachwibangjeongsig.jb.user.User;
+import com.jachwibangjeongsig.jb.user.UserRepository;
+import com.jachwibangjeongsig.jb.user.UserRole;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mysql.MySQLContainer;
+import org.testcontainers.utility.DockerImageName;
+import tools.jackson.databind.ObjectMapper;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest(properties = {
+	"auth.google-client-id=test-google-client-id",
+	"auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
+	"auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
+	"vworld.api-key=test-vworld-api-key"
+})
+@AutoConfigureMockMvc
+@Testcontainers
+@Import(PropertyApiContractTest.StubGeocodingConfiguration.class)
+class PropertyApiContractTest {
+
+	@Container
+	@ServiceConnection
+	static final MySQLContainer MYSQL = new MySQLContainer(DockerImageName.parse("mysql:8.4"));
+
+	private static final Coordinates LOCATION = new Coordinates(37.279609852101984, 127.04339808904444);
+
+	@Autowired MockMvc mvc;
+	@Autowired ObjectMapper json;
+	@Autowired PropertyRepository properties;
+	@Autowired UserRepository users;
+	@Autowired JwtTokenService tokens;
+	@Autowired JdbcTemplate jdbc;
+	@Autowired StubGeocodingClient geocoding;
+
+	private User admin;
+	private User ordinary;
+
+	@BeforeEach
+	void reset() {
+		properties.deleteAll();
+		users.deleteAll();
+		geocoding.calls = 0;
+		geocoding.address = null;
+		geocoding.result = Optional.of(LOCATION);
+		geocoding.failure = null;
+		admin = saveUser("admin", UserRole.ADMIN);
+		ordinary = saveUser("ordinary", UserRole.USER);
+	}
+
+	@Test
+	void adminCreatesPropertyWithServerCoordinatesAndAuditing() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("exclusiveArea", new BigDecimal("23.50"));
+		body.put("floor", 3);
+		body.put("totalFloors", 10);
+		body.put("buildYear", 2020);
+		body.put("direction", "남향");
+		body.put("description", "매물 설명");
+		var response = create(bearer(admin), body)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").isNotEmpty())
+			.andExpect(jsonPath("$.name").value("테스트 매물"))
+			.andExpect(jsonPath("$.address").value(body.get("address")))
+			.andExpect(jsonPath("$.roadAddress").value(body.get("roadAddress")))
+			.andExpect(jsonPath("$.sggCode").value("41115"))
+			.andExpect(jsonPath("$.umdName").value("우만동"))
+			.andExpect(jsonPath("$.propertyType").value("원룸"))
+			.andExpect(jsonPath("$.leaseType").value("MONTHLY"))
+			.andExpect(jsonPath("$.deposit").value(1000))
+			.andExpect(jsonPath("$.monthlyRent").value(50))
+			.andExpect(jsonPath("$.exclusiveArea").value(23.5))
+			.andExpect(jsonPath("$.floor").value(3))
+			.andExpect(jsonPath("$.totalFloors").value(10))
+			.andExpect(jsonPath("$.buildYear").value(2020))
+			.andExpect(jsonPath("$.direction").value("남향"))
+			.andExpect(jsonPath("$.description").value("매물 설명"))
+			.andExpect(jsonPath("$.latitude").value(LOCATION.lat()))
+			.andExpect(jsonPath("$.longitude").value(LOCATION.lng()))
+			.andExpect(jsonPath("$.createdAt").isNotEmpty())
+			.andExpect(jsonPath("$.updatedAt").isNotEmpty())
+			.andReturn();
+
+		UUID id = UUID.fromString(json.readTree(response.getResponse().getContentAsString()).path("id").asString());
+		Property saved = properties.findById(id).orElseThrow();
+		assertThat(properties.count()).isEqualTo(1);
+		assertThat(saved.getName()).isEqualTo("테스트 매물");
+		assertThat(saved.getLeaseType()).isEqualTo(LeaseType.MONTHLY);
+		assertThat(saved.getExclusiveArea()).isEqualByComparingTo("23.50");
+		assertThat(saved.getLat()).isEqualTo(LOCATION.lat());
+		assertThat(saved.getLng()).isEqualTo(LOCATION.lng());
+		assertThat(saved.getCreatedAt()).isNotNull();
+		assertThat(saved.getUpdatedAt()).isNotNull();
+		assertThat(geocoding.calls).isEqualTo(1);
+		assertThat(geocoding.address).isEqualTo(body.get("roadAddress"));
+	}
+
+	@Test
+	void optionalFieldsCanBeOmittedForJeonseWithZeroMonthlyRent() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("deposit", 0);
+		body.put("monthlyRent", 0);
+		body.put("leaseType", "JEONSE");
+		create(bearer(admin), body).andExpect(status().isCreated());
+		Property saved = properties.findAll().getFirst();
+		assertThat(saved.getLeaseType()).isEqualTo(LeaseType.JEONSE);
+		assertThat(saved.getDeposit()).isZero();
+		assertThat(saved.getMonthlyRent()).isZero();
+		assertThat(saved.getExclusiveArea()).isNull();
+		assertThat(saved.getFloor()).isNull();
+		assertThat(saved.getTotalFloors()).isNull();
+		assertThat(saved.getBuildYear()).isNull();
+		assertThat(saved.getDirection()).isNull();
+		assertThat(saved.getDescription()).isNull();
+	}
+
+	@Test
+	void acceptsBasementAndBoundaryValuesWithoutRestrictingTypeOrDirection() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("name", "가".repeat(100));
+		body.put("address", "가".repeat(255));
+		body.put("roadAddress", "가".repeat(255));
+		body.put("sggCode", "41115");
+		body.put("umdName", "가".repeat(50));
+		body.put("propertyType", "가".repeat(20));
+		body.put("direction", "가".repeat(10));
+		body.put("description", "가".repeat(16383));
+		body.put("exclusiveArea", new BigDecimal("999999.99"));
+		body.put("floor", -1);
+		create(bearer(admin), body).andExpect(status().isCreated());
+		assertThat(properties.findAll().getFirst().getFloor()).isEqualTo(-1);
+	}
+
+	@Test
+	void repeatedRegistrationCreatesDifferentProperties() throws Exception {
+		create(bearer(admin), minimalBody()).andExpect(status().isCreated());
+		create(bearer(admin), minimalBody()).andExpect(status().isCreated());
+		assertThat(properties.findAll()).hasSize(2)
+			.extracting(Property::getId).doesNotHaveDuplicates();
+	}
+
+	@Test
+	void unauthenticatedRequestsAreRejectedBeforeValidation() throws Exception {
+		mvc.perform(post("/api/properties").contentType(APPLICATION_JSON).content("{}"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("INVALID_ACCESS_TOKEN"));
+		assertNoWork();
+	}
+
+	@Test
+	void expiredAndTamperedTokensAreRejected() throws Exception {
+		String expired = "Bearer " + tokens.issue(admin, UUID.randomUUID(), Instant.now().minusSeconds(1800)).accessToken();
+		create(expired, minimalBody()).andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_ACCESS_TOKEN"));
+		String valid = bearer(admin);
+		int signatureStart = valid.lastIndexOf('.') + 1;
+		char replacement = valid.charAt(signatureStart) == 'A' ? 'B' : 'A';
+		String tampered = valid.substring(0, signatureStart) + replacement + valid.substring(signatureStart + 1);
+		create(tampered, minimalBody()).andExpect(status().isUnauthorized());
+		assertNoWork();
+	}
+
+	@Test
+	void refreshTokenCannotBeUsedAsAccessToken() throws Exception {
+		String refresh = tokens.issue(admin, UUID.randomUUID(), Instant.now()).refreshToken();
+		create("Bearer " + refresh, minimalBody()).andExpect(status().isUnauthorized());
+		assertNoWork();
+	}
+
+	@Test
+	void ordinaryUsersAreForbiddenEvenForInvalidBody() throws Exception {
+		create(bearer(ordinary), Map.of())
+			.andExpect(status().isForbidden())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.status").value(403))
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"))
+			.andExpect(jsonPath("$.instance").value("/api/properties"))
+			.andExpect(jsonPath("$.timestamp").isNotEmpty());
+		assertNoWork();
+	}
+
+	@Test
+	void revokedAdminRoleTakesEffectWithoutReissuingToken() throws Exception {
+		String token = bearer(admin);
+		changeRole(admin, UserRole.USER);
+		create(token, minimalBody()).andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+		assertNoWork();
+	}
+
+	@Test
+	void newlyGrantedAdminRoleTakesEffectWithoutReissuingToken() throws Exception {
+		String token = bearer(ordinary);
+		changeRole(ordinary, UserRole.ADMIN);
+		create(token, minimalBody()).andExpect(status().isCreated());
+		assertThat(properties.count()).isEqualTo(1);
+	}
+
+	@Test
+	void deletedUsersCannotRegisterUsingExistingTokens() throws Exception {
+		String token = bearer(admin);
+		users.deleteById(admin.getId());
+		create(token, minimalBody()).andExpect(status().isForbidden());
+		assertNoWork();
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidRequiredValues")
+	void requiredFieldsRejectMissingNullAndBlank(String field, String kind) throws Exception {
+		Map<String, Object> body = minimalBody();
+		switch (kind) {
+			case "missing" -> body.remove(field);
+			case "null" -> body.put(field, null);
+			case "empty" -> body.put(field, "");
+			case "blank" -> body.put(field, " \t\n");
+			default -> throw new IllegalArgumentException(kind);
+		}
+		assertInvalid(body);
+	}
+
+	static Stream<Arguments> invalidRequiredValues() {
+		Stream<Arguments> strings = Stream.of("name", "address", "roadAddress", "sggCode", "umdName", "propertyType")
+			.flatMap(field -> Stream.of("missing", "null", "empty", "blank").map(kind -> Arguments.of(field, kind)));
+		Stream<Arguments> otherRequired = Stream.of("deposit", "monthlyRent", "leaseType")
+			.flatMap(field -> Stream.of("missing", "null").map(kind -> Arguments.of(field, kind)));
+		return Stream.concat(strings, otherRequired);
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidValues")
+	void invalidValuesAreRejectedWithoutCallingProvider(String field, Object value) throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put(field, value);
+		assertInvalid(body);
+	}
+
+	static Stream<Arguments> invalidValues() {
+		return Stream.of(
+			Arguments.of("name", "가".repeat(101)), Arguments.of("address", "가".repeat(256)),
+			Arguments.of("roadAddress", "가".repeat(256)), Arguments.of("sggCode", "1".repeat(21)),
+			Arguments.of("sggCode", "4111"), Arguments.of("sggCode", "411150"),
+			Arguments.of("sggCode", "41A15"), Arguments.of("sggCode", " 41115"),
+			Arguments.of("sggCode", "41115 "), Arguments.of("sggCode", "４１１１５"),
+			Arguments.of("sggCode", "41115\n"),
+			Arguments.of("umdName", "가".repeat(51)), Arguments.of("propertyType", "가".repeat(21)),
+			Arguments.of("direction", "가".repeat(11)), Arguments.of("direction", "  "),
+			Arguments.of("description", "가".repeat(16384)),
+			Arguments.of("deposit", -1), Arguments.of("monthlyRent", -1),
+			Arguments.of("deposit", 2147483648L), Arguments.of("monthlyRent", "not-a-number"),
+			Arguments.of("deposit", new BigDecimal("1000.5")), Arguments.of("monthlyRent", new BigDecimal("50.5")),
+			Arguments.of("deposit", "1000"), Arguments.of("monthlyRent", true),
+			Arguments.of("floor", new BigDecimal("3.5")), Arguments.of("totalFloors", new BigDecimal("10.5")),
+			Arguments.of("buildYear", new BigDecimal("2020.5")),
+			Arguments.of("exclusiveArea", 0), Arguments.of("exclusiveArea", -1),
+			Arguments.of("exclusiveArea", new BigDecimal("1000000.00")),
+			Arguments.of("exclusiveArea", new BigDecimal("23.501")),
+			Arguments.of("totalFloors", 0), Arguments.of("totalFloors", -1),
+			Arguments.of("buildYear", 0), Arguments.of("buildYear", -1),
+			Arguments.of("leaseType", "SALE"), Arguments.of("leaseType", "monthly"),
+			Arguments.of("leaseType", ""), Arguments.of("leaseType", "  "),
+			Arguments.of("leaseType", 0), Arguments.of("leaseType", 1),
+			Arguments.of("leaseType", true), Arguments.of("monthlyRent", 0),
+			Arguments.of("leaseType", "JEONSE")
+		);
+	}
+
+	@Test
+	void malformedJsonIsRejected() throws Exception {
+		mvc.perform(post("/api/properties").header(HttpHeaders.AUTHORIZATION, bearer(admin))
+			.contentType(APPLICATION_JSON).content("{"))
+			.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+		assertNoWork();
+	}
+
+	@Test
+	void allOptionalFieldsMayExplicitlyBeNull() throws Exception {
+		Map<String, Object> body = minimalBody();
+		Stream.of("exclusiveArea", "floor", "totalFloors", "buildYear", "direction", "description")
+			.forEach(field -> body.put(field, null));
+		create(bearer(admin), body).andExpect(status().isCreated());
+	}
+
+	@Test
+	void missingCoordinatesReturnBadRequestWithoutSaving() throws Exception {
+		geocoding.result = Optional.empty();
+		create(bearer(admin), minimalBody()).andExpect(status().isBadRequest())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("ADDRESS_NOT_GEOCODABLE"));
+		assertThat(properties.count()).isZero();
+	}
+
+	@Test
+	void providerFailureReturnsBadGatewayWithoutSaving() throws Exception {
+		geocoding.failure = new GeocodingUnavailableException("provider unavailable");
+		create(bearer(admin), minimalBody()).andExpect(status().isBadGateway())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("GEOCODING_UNAVAILABLE"));
+		assertThat(properties.count()).isZero();
+	}
+
+	@Test
+	void jeonsePropertyIsReturnedWithLeaseTypeInFavoriteListAndDetail() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("leaseType", "JEONSE");
+		body.put("deposit", 20000);
+		body.put("monthlyRent", 0);
+		var response = create(bearer(admin), body)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.leaseType").value("JEONSE"))
+			.andExpect(jsonPath("$.deposit").value(20000))
+			.andExpect(jsonPath("$.monthlyRent").value(0)).andReturn();
+		String id = json.readTree(response.getResponse().getContentAsString()).path("id").asString();
+		String userToken = bearer(ordinary);
+		mvc.perform(post("/api/me/favorites").header(HttpHeaders.AUTHORIZATION, userToken)
+			.contentType(APPLICATION_JSON).content(json.writeValueAsString(Map.of("propertyId", id))))
+			.andExpect(status().isCreated());
+		mvc.perform(get("/api/me/favorites").header(HttpHeaders.AUTHORIZATION, userToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[0].property.leaseType").value("JEONSE"));
+		mvc.perform(get("/api/me/favorites/" + id).header(HttpHeaders.AUTHORIZATION, userToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.property.leaseType").value("JEONSE"))
+			.andExpect(jsonPath("$.property.monthlyRent").value(0));
+	}
+
+	@Test
+	void newlyRegisteredPropertyCanBeFavoritedAndRead() throws Exception {
+		var response = create(bearer(admin), minimalBody()).andExpect(status().isCreated()).andReturn();
+		String id = json.readTree(response.getResponse().getContentAsString()).path("id").asString();
+		String userToken = bearer(ordinary);
+		mvc.perform(post("/api/me/favorites").header(HttpHeaders.AUTHORIZATION, userToken)
+			.contentType(APPLICATION_JSON).content(json.writeValueAsString(Map.of("propertyId", id))))
+			.andExpect(status().isCreated());
+		mvc.perform(get("/api/me/favorites/" + id).header(HttpHeaders.AUTHORIZATION, userToken))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.property.id").value(id))
+			.andExpect(jsonPath("$.property.name").value("테스트 매물"))
+			.andExpect(jsonPath("$.property.leaseType").value("MONTHLY"))
+			.andExpect(jsonPath("$.property.deposit").value(1000))
+			.andExpect(jsonPath("$.property.latitude").value(LOCATION.lat()))
+			.andExpect(jsonPath("$.property.longitude").value(LOCATION.lng()));
+	}
+
+	private void assertInvalid(Map<String, Object> body) throws Exception {
+		create(bearer(admin), body).andExpect(status().isBadRequest())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+		assertNoWork();
+	}
+
+	private void assertNoWork() {
+		assertThat(properties.count()).isZero();
+		assertThat(geocoding.calls).isZero();
+	}
+
+	private ResultActions create(String token, Map<String, Object> body) throws Exception {
+		return mvc.perform(post("/api/properties").header(HttpHeaders.AUTHORIZATION, token)
+			.contentType(APPLICATION_JSON).content(json.writeValueAsString(body)));
+	}
+
+	private String bearer(User user) {
+		return "Bearer " + tokens.issue(user, UUID.randomUUID(), Instant.now()).accessToken();
+	}
+
+	private User saveUser(String name, UserRole role) {
+		return users.save(User.builder().provider("google").providerId(name).email(name + "@example.com").role(role).build());
+	}
+
+	private void changeRole(User user, UserRole role) {
+		jdbc.update("UPDATE users SET role = ? WHERE id = UUID_TO_BIN(?)", role.name(), user.getId().toString());
+	}
+
+	private static Map<String, Object> minimalBody() {
+		return new LinkedHashMap<>(Map.of(
+			"name", "테스트 매물", "address", "경기 수원시 팔달구 우만동 228",
+			"roadAddress", "경기 수원시 팔달구 월드컵로 205", "sggCode", "41115", "umdName", "우만동",
+			"propertyType", "원룸", "leaseType", "MONTHLY", "deposit", 1000, "monthlyRent", 50
+		));
+	}
+
+	static class StubGeocodingClient implements GeocodingClient {
+		int calls;
+		String address;
+		Optional<Coordinates> result;
+		RuntimeException failure;
+
+		@Override
+		public Optional<Coordinates> locate(String roadAddress) {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			calls++;
+			address = roadAddress;
+			if (failure != null) {
+				throw failure;
+			}
+			return result;
+		}
+	}
+
+	@TestConfiguration(proxyBeanMethods = false)
+	static class StubGeocodingConfiguration {
+		@Bean
+		@Primary
+		StubGeocodingClient stubGeocodingClient() {
+			return new StubGeocodingClient();
+		}
+	}
+}

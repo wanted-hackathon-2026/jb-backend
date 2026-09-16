@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.jachwibangjeongsig.jb.workplace.controller")
 public class WorkplaceExceptionHandler {
 
 	@ExceptionHandler(AddressNotGeocodableException.class)

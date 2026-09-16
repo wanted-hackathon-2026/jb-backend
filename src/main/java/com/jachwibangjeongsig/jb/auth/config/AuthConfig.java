@@ -1,6 +1,8 @@
 package com.jachwibangjeongsig.jb.auth.config;
 
 import com.jachwibangjeongsig.jb.auth.exception.AuthAuthenticationEntryPoint;
+import com.jachwibangjeongsig.jb.auth.exception.AuthAccessDeniedHandler;
+import com.jachwibangjeongsig.jb.property.security.PropertyAdminAuthorizationManager;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +37,9 @@ public class AuthConfig {
 	SecurityFilterChain securityFilterChain(
 		HttpSecurity http,
 		JwtDecoder accessTokenDecoder,
-		AuthenticationEntryPoint authenticationEntryPoint
+		AuthenticationEntryPoint authenticationEntryPoint,
+		AuthAccessDeniedHandler accessDeniedHandler,
+		PropertyAdminAuthorizationManager propertyAdminAuthorizationManager
 	) throws Exception {
 		http
 			.csrf(csrf -> csrf.disable())
@@ -44,6 +48,10 @@ public class AuthConfig {
 			.formLogin(form -> form.disable())
 			.httpBasic(basic -> basic.disable())
 			.logout(logout -> logout.disable())
+			.exceptionHandling(exceptions -> exceptions
+				.authenticationEntryPoint(authenticationEntryPoint)
+				.accessDeniedHandler(accessDeniedHandler)
+			)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.POST,
 					"/api/auth/login/google",
@@ -52,11 +60,13 @@ public class AuthConfig {
 				).permitAll()
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/properties").access(propertyAdminAuthorizationManager)
 				.anyRequest().authenticated()
 			)
 			.oauth2ResourceServer(oauth -> oauth
 				.jwt(jwt -> jwt.decoder(accessTokenDecoder))
 				.authenticationEntryPoint(authenticationEntryPoint)
+				.accessDeniedHandler(accessDeniedHandler)
 			);
 		return http.build();
 	}
