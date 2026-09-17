@@ -4,6 +4,7 @@ import com.jachwibangjeongsig.jb.auth.dto.GoogleIdentity;
 import com.jachwibangjeongsig.jb.auth.dto.IssuedTokens;
 import com.jachwibangjeongsig.jb.auth.entity.RefreshTokenSession;
 import com.jachwibangjeongsig.jb.auth.exception.InvalidRefreshTokenException;
+import com.jachwibangjeongsig.jb.auth.exception.RefreshTokenReuseException;
 import com.jachwibangjeongsig.jb.auth.repository.RefreshTokenSessionRepository;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
@@ -52,7 +53,7 @@ public class AuthServiceImpl implements AuthService {
 	}
 
 	@Override
-	@Transactional
+	@Transactional(noRollbackFor = RefreshTokenReuseException.class)
 	public ReissueResult reissue(String refreshToken) {
 		JwtTokenService.RefreshTokenClaims claims = jwtTokenService.verifyRefreshToken(refreshToken);
 		LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -62,7 +63,7 @@ public class AuthServiceImpl implements AuthService {
 
 		if (!current.getUser().getId().equals(claims.userId()) || !current.isUsableAt(now)) {
 			revokeFamily(current.getFamilyId(), now);
-			throw new InvalidRefreshTokenException();
+			throw new RefreshTokenReuseException();
 		}
 
 		current.revoke(now);
