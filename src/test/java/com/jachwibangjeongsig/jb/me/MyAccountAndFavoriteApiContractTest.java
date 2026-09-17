@@ -88,13 +88,14 @@ class MyAccountAndFavoriteApiContractTest {
         jdbc.update("DELETE FROM favorite");
         jdbc.update("DELETE FROM property");
         users.deleteAll();
-        me = user("me", null);
+        me = user("me", "내닉네임");
         other = user("other", "사용중닉네임");
         propertyId = property("테스트 매물");
     }
 
     @Test
     void myInformationIsIdentifiedByTokenAndIncompleteBeforeNicknameSetup() throws Exception {
+        incompleteProfile();
         as(me, get("/api/me").param("userId", other.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(me.getId().toString()))
@@ -124,6 +125,7 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "가", "가나다라마바사아자차카타파하가나"})
     void invalidNicknameDoesNotChangeStoredInformation(String nickname) throws Exception {
+        incompleteProfile();
         problem(nickname(nickname), 400, "INVALID_REQUEST", "/api/me");
         assertThat(users.findById(me.getId()).orElseThrow().getNickname()).isNull();
     }
@@ -131,6 +133,7 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{\"nickname\":null}"})
     void nicknameMustBePresentAndNotNull(String body) throws Exception {
+        incompleteProfile();
         problem(as(me, patch("/api/me").contentType(APPLICATION_JSON).content(body)),
             400, "INVALID_REQUEST", "/api/me");
         assertThat(users.findById(me.getId()).orElseThrow().getNickname()).isNull();
@@ -307,6 +310,7 @@ class MyAccountAndFavoriteApiContractTest {
 
     @Test
     void allSixEndpointsRequireAValidAccessToken() throws Exception {
+        incompleteProfile();
         for (String token : new String[] {null, "invalid-token", tokens.issue(me, UUID.randomUUID(),
             Instant.now().minusSeconds(3600)).accessToken()}) {
             for (MockHttpServletRequestBuilder request : new MockHttpServletRequestBuilder[] {
@@ -326,6 +330,11 @@ class MyAccountAndFavoriteApiContractTest {
     private User user(String identity, String nickname) {
         return users.save(User.builder().provider("google").providerId(identity)
             .email(identity + "@example.com").nickname(nickname).build());
+    }
+
+    private void incompleteProfile() {
+        me.updateNickname(null);
+        users.saveAndFlush(me);
     }
 
     private ResultActions as(User user, MockHttpServletRequestBuilder request) throws Exception {
