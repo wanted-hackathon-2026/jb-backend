@@ -1,5 +1,6 @@
 package com.jachwibangjeongsig.jb.auth.config;
 
+import org.springframework.security.authorization.AuthorizationManagers;
 import com.jachwibangjeongsig.jb.auth.exception.AuthAuthenticationEntryPoint;
 import com.jachwibangjeongsig.jb.auth.exception.AuthAccessDeniedHandler;
 import com.jachwibangjeongsig.jb.property.security.PropertyAdminAuthorizationManager;
@@ -64,7 +65,7 @@ public class AuthConfig {
 				.requestMatchers(HttpMethod.GET, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.PATCH, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.POST, "/api/properties").access(
-					org.springframework.security.authorization.AuthorizationManagers.allOf(
+					AuthorizationManagers.allOf(
 						profileAuthorizationManager, propertyAdminAuthorizationManager))
 				.anyRequest().access(profileAuthorizationManager)
 			)

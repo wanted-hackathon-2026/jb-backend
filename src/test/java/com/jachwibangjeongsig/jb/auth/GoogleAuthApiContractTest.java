@@ -1,5 +1,20 @@
 package com.jachwibangjeongsig.jb.auth;
 
+import com.jachwibangjeongsig.jb.auth.repository.RefreshTokenSessionRepository;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.hamcrest.Matchers;
+import org.mockito.Mockito;
+import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import com.jachwibangjeongsig.jb.auth.dto.GoogleIdentity;
 import com.jachwibangjeongsig.jb.auth.exception.InvalidGoogleIdentityTokenException;
 import com.jachwibangjeongsig.jb.auth.service.GoogleIdentityVerifier;
@@ -75,13 +90,13 @@ class GoogleAuthApiContractTest {
 	UserRepository userRepository;
 
 	@Autowired
-	com.jachwibangjeongsig.jb.auth.repository.RefreshTokenSessionRepository sessions;
+	RefreshTokenSessionRepository sessions;
 
 	@Autowired
-	org.springframework.jdbc.core.JdbcTemplate jdbc;
+	JdbcTemplate jdbc;
 
-	@org.springframework.test.context.bean.override.mockito.MockitoSpyBean
-	com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient geocoding;
+	@MockitoSpyBean
+	GeocodingClient geocoding;
 
 	@BeforeEach
 	void cleanDatabase() {
@@ -92,8 +107,8 @@ class GoogleAuthApiContractTest {
 	void swaggerRemainsPublicWithoutGoogleLoginWhenDisabled() throws Exception {
 		mockMvc.perform(get("/swagger-ui/index.html"))
 			.andExpect(status().isOk())
-			.andExpect(content().string(org.hamcrest.Matchers.not(
-				org.hamcrest.Matchers.containsString("swagger-google-login")
+			.andExpect(content().string(Matchers.not(
+				Matchers.containsString("swagger-google-login")
 			)));
 		MvcResult result = mockMvc.perform(get("/v3/api-docs"))
 			.andExpect(status().isOk()).andReturn();
@@ -140,18 +155,18 @@ class GoogleAuthApiContractTest {
 
 	@Test
 	void concurrentFirstLoginsCreateExactlyOneUserAndBothSucceed() throws Exception {
-		var start = new java.util.concurrent.CountDownLatch(1);
-		try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
-			java.util.concurrent.Callable<JsonNode> request = () -> {
-				assertThat(start.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+		var start = new CountDownLatch(1);
+		try (var executor = Executors.newFixedThreadPool(2)) {
+			Callable<JsonNode> request = () -> {
+				assertThat(start.await(10, TimeUnit.SECONDS)).isTrue();
 				return objectMapper.readTree(login(NEW_USER_TOKEN)
 					.andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
 			};
 			var first = executor.submit(request);
 			var second = executor.submit(request);
 			start.countDown();
-			JsonNode a = first.get(20, java.util.concurrent.TimeUnit.SECONDS);
-			JsonNode b = second.get(20, java.util.concurrent.TimeUnit.SECONDS);
+			JsonNode a = first.get(20, TimeUnit.SECONDS);
+			JsonNode b = second.get(20, TimeUnit.SECONDS);
 			assertThat(a.get("user").get("id").asText()).isEqualTo(b.get("user").get("id").asText());
 			assertThat(List.of(a.get("isNewUser").asBoolean(), b.get("isNewUser").asBoolean()))
 				.containsExactlyInAnyOrder(true, false);
@@ -217,7 +232,7 @@ class GoogleAuthApiContractTest {
 	void reissueRotatesRefreshTokenAndRejectsThePreviousToken() throws Exception {
 		Cookie original = refreshCookie(login(NEW_USER_TOKEN).andReturn());
 		Cookie independent = refreshCookie(login(NEW_USER_TOKEN).andReturn());
-		String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+		String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
 			.digest(original.getValue().getBytes(StandardCharsets.UTF_8)));
 		var family = sessions.findByTokenHash(hash)
 			.orElseThrow().getFamilyId();
@@ -254,8 +269,8 @@ class GoogleAuthApiContractTest {
 			new String[]{"DELETE", "/api/workplaces/00000000-0000-0000-0000-000000000001"},
 			new String[]{"GET", "/api/me/favorites"}, new String[]{"GET", property},
 			new String[]{"POST", "/api/me/favorites"}, new String[]{"DELETE", property})) {
-			mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-				.request(org.springframework.http.HttpMethod.valueOf(endpoint[0]), endpoint[1])
+			mockMvc.perform(MockMvcRequestBuilders
+				.request(HttpMethod.valueOf(endpoint[0]), endpoint[1])
 				.header("Authorization", "Bearer " + access).contentType(APPLICATION_JSON).content("{}"))
 				.andExpect(status().isForbidden())
 				.andExpect(content().contentTypeCompatibleWith("application/problem+json"))
@@ -263,9 +278,9 @@ class GoogleAuthApiContractTest {
 		}
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM workplace", Long.class)).isZero();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM favorite", Long.class)).isZero();
-		org.mockito.Mockito.verifyNoInteractions(geocoding);
+		Mockito.verifyNoInteractions(geocoding);
 		mockMvc.perform(get("/api/me").header("Authorization", "Bearer " + access)).andExpect(status().isOk());
-		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/me")
+		mockMvc.perform(MockMvcRequestBuilders.patch("/api/me")
 			.header("Authorization", "Bearer " + access).contentType(APPLICATION_JSON).content("{\"nickname\":\"두자\"}"))
 			.andExpect(status().isOk());
 		for (String path : List.of("/api/workplaces", "/api/me/favorites")) {
@@ -284,7 +299,7 @@ class GoogleAuthApiContractTest {
 			.andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("PROFILE_INCOMPLETE"));
 		assertThat(userRepository.findById(admin.getId()).orElseThrow().getNickname()).isNull();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property", Long.class)).isZero();
-		org.mockito.Mockito.verifyNoInteractions(geocoding);
+		Mockito.verifyNoInteractions(geocoding);
 	}
 
 	@Test
@@ -320,7 +335,7 @@ class GoogleAuthApiContractTest {
 			.andExpect(cookie().maxAge("refresh_token", 0));
 	}
 
-	private org.springframework.test.web.servlet.ResultActions login(String idToken) throws Exception {
+	private ResultActions login(String idToken) throws Exception {
 		return mockMvc.perform(post("/api/auth/login/google")
 			.contentType(APPLICATION_JSON)
 			.content(objectMapper.writeValueAsString(Map.of("idToken", idToken))));

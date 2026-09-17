@@ -1,5 +1,6 @@
 package com.jachwibangjeongsig.jb.me;
 
+import org.assertj.core.api.Assertions;
 import com.jachwibangjeongsig.jb.me.exception.ApiException;
 import com.jachwibangjeongsig.jb.me.service.AccountServiceImpl;
 import com.jachwibangjeongsig.jb.user.User;
@@ -24,7 +25,7 @@ class AccountServiceErrorTest {
         doThrow(violation).when(users).flush();
         assertThatThrownBy(() -> new AccountServiceImpl(users).updateNickname(UUID.randomUUID(), "새닉네임"))
             .isInstanceOfSatisfying(ApiException.class, exception ->
-                org.assertj.core.api.Assertions.assertThat(exception.code()).isEqualTo("NICKNAME_ALREADY_EXISTS"));
+                Assertions.assertThat(exception.code()).isEqualTo("NICKNAME_ALREADY_EXISTS"));
     }
 
     @Test

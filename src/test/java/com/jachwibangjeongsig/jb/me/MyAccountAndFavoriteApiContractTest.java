@@ -1,5 +1,10 @@
 package com.jachwibangjeongsig.jb.me;
 
+import java.util.List;
+import java.util.concurrent.Callable;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
@@ -54,7 +59,7 @@ class MyAccountAndFavoriteApiContractTest {
     @Autowired JwtTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired PlatformTransactionManager transactionManager;
 
     User me;
     User other;
@@ -63,9 +68,9 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void independentEmailAndNicknameUpdatesDoNotOverwriteEachOther(boolean nicknameCommitsLast) {
-        var outer = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-        var inner = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-        inner.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        var outer = new TransactionTemplate(transactionManager);
+        var inner = new TransactionTemplate(transactionManager);
+        inner.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         outer.executeWithoutResult(status -> {
             User stale = users.findById(me.getId()).orElseThrow();
             inner.executeWithoutResult(innerStatus -> {
@@ -260,7 +265,7 @@ class MyAccountAndFavoriteApiContractTest {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            java.util.concurrent.Callable<Integer> request = () -> {
+            Callable<Integer> request = () -> {
                 ready.countDown();
                 if (!start.await(10, TimeUnit.SECONDS)) throw new AssertionError("Start barrier timed out");
                 return mvc.perform(post("/api/me/favorites").header("Authorization", "Bearer " + token)
@@ -273,7 +278,7 @@ class MyAccountAndFavoriteApiContractTest {
             } finally {
                 start.countDown();
             }
-            assertThat(java.util.List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
                 .containsExactlyInAnyOrder(201, 409);
         }
         assertThat(countFavorites(me)).isEqualTo(1);
