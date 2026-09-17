@@ -74,6 +74,9 @@ class GoogleAuthApiContractTest {
 	@Autowired
 	UserRepository userRepository;
 
+	@Autowired
+	com.jachwibangjeongsig.jb.auth.repository.RefreshTokenSessionRepository sessions;
+
 	@BeforeEach
 	void cleanDatabase() {
 		userRepository.deleteAll();
@@ -207,6 +210,11 @@ class GoogleAuthApiContractTest {
 	@Test
 	void reissueRotatesRefreshTokenAndRejectsThePreviousToken() throws Exception {
 		Cookie original = refreshCookie(login(NEW_USER_TOKEN).andReturn());
+		Cookie independent = refreshCookie(login(NEW_USER_TOKEN).andReturn());
+		String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+			.digest(original.getValue().getBytes(StandardCharsets.UTF_8)));
+		var family = sessions.findByTokenHash(hash)
+			.orElseThrow().getFamilyId();
 
 		MvcResult reissue = mockMvc.perform(post("/api/auth/reissue").cookie(original))
 			.andExpect(status().isOk())
@@ -222,6 +230,11 @@ class GoogleAuthApiContractTest {
 		mockMvc.perform(post("/api/auth/reissue").cookie(original))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+		assertThat(sessions.findAllByFamilyIdAndRevokedAtIsNull(family)).isEmpty();
+		mockMvc.perform(post("/api/auth/reissue").cookie(rotated))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+		mockMvc.perform(post("/api/auth/reissue").cookie(independent)).andExpect(status().isOk());
 	}
 
 	@Test
