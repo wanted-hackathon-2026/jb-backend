@@ -406,7 +406,8 @@ class PropertyApiContractTest {
 	}
 
 	private User saveUser(String name, UserRole role) {
-		return users.save(User.builder().provider("google").providerId(name).email(name + "@example.com").role(role).build());
+		return users.save(User.builder().provider("google").providerId(name).email(name + "@example.com")
+			.nickname(name).role(role).build());
 	}
 
 	private void changeRole(User user, UserRole role) {

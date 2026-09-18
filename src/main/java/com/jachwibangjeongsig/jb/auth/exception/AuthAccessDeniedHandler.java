@@ -25,8 +25,10 @@ public class AuthAccessDeniedHandler implements AccessDeniedHandler {
 		AccessDeniedException exception) throws IOException {
 		response.setStatus(HttpStatus.FORBIDDEN.value());
 		response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+		boolean incomplete = exception instanceof ProfileIncompleteException;
 		objectMapper.writeValue(response.getOutputStream(), AuthProblemDetails.response(
-			HttpStatus.FORBIDDEN, "FORBIDDEN", "접근 권한이 없습니다.", request
+			HttpStatus.FORBIDDEN, incomplete ? "PROFILE_INCOMPLETE" : "FORBIDDEN",
+			incomplete ? exception.getMessage() : "접근 권한이 없습니다.", request
 		));
 	}
 }

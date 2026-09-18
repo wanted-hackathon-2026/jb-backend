@@ -183,6 +183,7 @@ class WorkplaceApiContractTest {
 			.provider("google")
 			.providerId(providerId)
 			.email(email)
+			.nickname(providerId)
 			.role(UserRole.USER)
 			.build());
 	}
