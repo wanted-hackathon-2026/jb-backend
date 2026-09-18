@@ -15,12 +15,14 @@ public class PropertyService {
 
 	private final PropertyRepository propertyRepository;
 	private final GeocodingClient geocodingClient;
+	private final SafetyMetricService safetyMetricService;
 	private final TransactionTemplate transactionTemplate;
 
 	public PropertyService(PropertyRepository propertyRepository, GeocodingClient geocodingClient,
-		PlatformTransactionManager transactionManager) {
+		PlatformTransactionManager transactionManager, SafetyMetricService safetyMetricService) {
 		this.propertyRepository = propertyRepository;
 		this.geocodingClient = geocodingClient;
+		this.safetyMetricService = safetyMetricService;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 	}
 
@@ -28,7 +30,7 @@ public class PropertyService {
 		// Do not hold a database transaction open while waiting for VWorld.
 		Coordinates coordinates = geocodingClient.locate(request.roadAddress())
 			.orElseThrow(PropertyAddressNotGeocodableException::new);
-		return transactionTemplate.execute(status -> propertyRepository.saveAndFlush(Property.builder()
+		Property property = transactionTemplate.execute(status -> propertyRepository.saveAndFlush(Property.builder()
 			.name(request.name()).address(request.address()).roadAddress(request.roadAddress())
 			.sggCode(request.sggCode()).umdName(request.umdName())
 			.lat(coordinates.lat()).lng(coordinates.lng()).propertyType(request.propertyType())
@@ -37,5 +39,7 @@ public class PropertyService {
 			.exclusiveArea(request.exclusiveArea()).floor(request.floor()).totalFloors(request.totalFloors())
 			.buildYear(request.buildYear()).direction(request.direction()).description(request.description())
 			.build()));
+		safetyMetricService.collect(property);
+		return property;
 	}
 }
