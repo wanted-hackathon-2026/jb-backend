@@ -13,6 +13,16 @@ import java.util.UUID;
 public interface PropertyFeatureRepository extends JpaRepository<PropertyFeature, UUID> {
     @Modifying
     @Query(value = """
+        INSERT INTO property_feature (id, property_id, category, metric_code, numeric_value, text_value, unit, computed_at)
+        VALUES (:id, :propertyId, 'NOISE', :metricCode, :value, :text, :unit, :computedAt)
+        ON DUPLICATE KEY UPDATE numeric_value = :value, text_value = :text, unit = :unit, computed_at = :computedAt
+        """, nativeQuery = true)
+    int upsertNoiseMetric(@Param("id") UUID id, @Param("propertyId") UUID propertyId,
+        @Param("metricCode") String metricCode, @Param("value") BigDecimal value, @Param("text") String text,
+        @Param("unit") String unit, @Param("computedAt") LocalDateTime computedAt);
+
+    @Modifying
+    @Query(value = """
         INSERT INTO property_feature (id, property_id, category, metric_code, numeric_value, unit, computed_at)
         VALUES (:id, :propertyId, 'SAFETY', :metricCode, :value, :unit, :computedAt)
         ON DUPLICATE KEY UPDATE numeric_value = :value, unit = :unit, computed_at = :computedAt
