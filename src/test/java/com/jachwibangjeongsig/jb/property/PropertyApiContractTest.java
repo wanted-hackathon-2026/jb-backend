@@ -17,6 +17,7 @@ import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource;
 import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource.Kind;
 import com.jachwibangjeongsig.jb.property.service.SafetyMetricCalculator.Facility;
 import com.jachwibangjeongsig.jb.property.service.SafetyMetricService;
+import com.jachwibangjeongsig.jb.property.service.SunlightMetricService;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
 import com.jachwibangjeongsig.jb.user.UserRole;
@@ -101,6 +102,7 @@ class PropertyApiContractTest {
 	@Autowired NoiseMetricService noiseMetrics;
 	@Autowired StubInfrastructureSource infrastructureSource;
 	@Autowired InfrastructureMetricService infrastructureMetrics;
+	@Autowired SunlightMetricService sunlightMetrics;
 
 	private User admin;
 	private User ordinary;
@@ -474,6 +476,61 @@ class PropertyApiContractTest {
 		create(bearer(admin), minimalBody()).andExpect(status().isCreated());
 		assertThat(safetySource.calls).isZero();
 		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature", Long.class)).isZero();
+	}
+
+	@Test
+	void registrationStoresSunlightEstimateLevel() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("direction", "남향");
+		body.put("floor", 5);
+		body.put("totalFloors", 10);
+
+		var response = create(bearer(admin), body).andExpect(status().isCreated()).andReturn();
+		String id = json.readTree(response.getResponse().getContentAsString()).path("id").asString();
+
+		assertThat(jdbc.queryForObject("""
+			SELECT text_value FROM property_feature
+			WHERE property_id = UUID_TO_BIN(?) AND category = 'SUNLIGHT'
+			AND metric_code = 'SUNLIGHT_ESTIMATE_LEVEL'
+			""", String.class, id)).isEqualTo("GOOD");
+		assertThat(jdbc.queryForObject("""
+			SELECT COUNT(*) FROM property_feature
+			WHERE property_id = UUID_TO_BIN(?) AND category = 'SUNLIGHT' AND numeric_value IS NULL AND unit = 'level'
+			""", Long.class, id)).isEqualTo(1);
+	}
+
+	@Test
+	void unsupportedSunlightInputDoesNotCreateFeature() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("direction", "남남향");
+		body.put("floor", 5);
+		body.put("totalFloors", 10);
+
+		create(bearer(admin), body).andExpect(status().isCreated());
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category = 'SUNLIGHT'",
+			Long.class)).isZero();
+	}
+
+	@Test
+	void sunlightRecollectionUpdatesExistingRowWithoutDuplicate() throws Exception {
+		Map<String, Object> body = minimalBody();
+		body.put("direction", "남향");
+		body.put("floor", 5);
+		body.put("totalFloors", 10);
+		create(bearer(admin), body).andExpect(status().isCreated());
+		String featureId = jdbc.queryForObject("""
+			SELECT BIN_TO_UUID(id) FROM property_feature
+			WHERE category = 'SUNLIGHT' AND metric_code = 'SUNLIGHT_ESTIMATE_LEVEL'
+			""", String.class);
+		jdbc.update("UPDATE property_feature SET text_value = 'LOW' WHERE id = UUID_TO_BIN(?)", featureId);
+
+		sunlightMetrics.collect(properties.findAll().getFirst());
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category = 'SUNLIGHT'",
+			Long.class)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT text_value FROM property_feature WHERE id = UUID_TO_BIN(?)",
+			String.class, featureId)).isEqualTo("GOOD");
 	}
 
 	@Test
