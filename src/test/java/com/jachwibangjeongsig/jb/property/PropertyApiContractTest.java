@@ -7,11 +7,13 @@ import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 import com.jachwibangjeongsig.jb.property.entity.Property;
 import com.jachwibangjeongsig.jb.property.entity.LeaseType;
 import com.jachwibangjeongsig.jb.property.repository.PropertyRepository;
+import com.jachwibangjeongsig.jb.property.service.CsvSafetyFacilitySource;
+import com.jachwibangjeongsig.jb.property.service.NoiseMetricService;
+import com.jachwibangjeongsig.jb.property.service.NoiseObservationSource;
 import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource;
 import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource.Kind;
 import com.jachwibangjeongsig.jb.property.service.SafetyMetricCalculator.Facility;
 import com.jachwibangjeongsig.jb.property.service.SafetyMetricService;
-import com.jachwibangjeongsig.jb.property.service.CsvSafetyFacilitySource;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
 import com.jachwibangjeongsig.jb.user.UserRole;
@@ -45,6 +47,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.Charset;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -86,12 +91,19 @@ class PropertyApiContractTest {
 	@Autowired StubGeocodingClient geocoding;
 	@Autowired StubSafetySource safetySource;
 	@Autowired SafetyMetricService safetyMetrics;
+	@Autowired StubNoiseSource noiseSource;
+	@Autowired NoiseMetricService noiseMetrics;
 
 	private User admin;
 	private User ordinary;
 
 	@BeforeEach
 	void reset() {
+		noiseSource.enabled = false;
+		noiseSource.hours = 84;
+		noiseSource.fail = false;
+		noiseSource.value = "50";
+		noiseSource.sensorId = "test-sensor";
 		properties.deleteAll();
 		users.deleteAll();
 		geocoding.calls = 0;
@@ -601,8 +613,83 @@ class PropertyApiContractTest {
 		}
 	}
 
+	@Test
+	void noiseRegistrationStoresSixMetricsWithoutHoldingTransactionDuringSourceCall() throws Exception {
+		noiseSource.enabled = true;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='NOISE'", Integer.class)).isEqualTo(6);
+		assertThat(jdbc.queryForObject("SELECT numeric_value FROM property_feature WHERE metric_code='SENSOR_AVG_NOISE_7D'", BigDecimal.class)).isEqualByComparingTo("50");
+		assertThat(jdbc.queryForObject("SELECT text_value FROM property_feature WHERE metric_code='SENSOR_ID'", String.class)).isEqualTo("test-sensor");
+	}
+
+	@Test
+	void insufficientNoiseCoverageDoesNotPreventPropertyOrSafetyStorage() throws Exception {
+		noiseSource.enabled = true;
+		noiseSource.hours = 83;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		assertThat(properties.count()).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='NOISE'", Integer.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='SAFETY'", Integer.class)).isEqualTo(4);
+	}
+
+	@Test
+	void noiseSourceFailureDoesNotPreventRegistration() throws Exception {
+		noiseSource.enabled = true;
+		noiseSource.fail = true;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='NOISE'", Integer.class)).isZero();
+	}
+
+	@Test
+	void noiseRecollectionUpdatesWithoutDuplicatesAndPreservesSuccessfulSnapshotOnFailure() throws Exception {
+		noiseSource.enabled = true;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		Property property = properties.findAll().getFirst();
+		noiseSource.value = "60";
+		noiseMetrics.collect(property);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='NOISE'", Integer.class)).isEqualTo(6);
+		assertThat(jdbc.queryForObject("SELECT numeric_value FROM property_feature WHERE metric_code='SENSOR_AVG_NOISE_7D'", BigDecimal.class)).isEqualByComparingTo("60");
+		noiseSource.fail = true;
+		noiseMetrics.collect(property);
+		assertThat(jdbc.queryForObject("SELECT numeric_value FROM property_feature WHERE metric_code='SENSOR_AVG_NOISE_7D'", BigDecimal.class)).isEqualByComparingTo("60");
+	}
+
+	@Test
+	void partialNoiseDatabaseFailureRollsBackWholeSnapshotWithoutRollingBackPropertyOrSafety() throws Exception {
+		noiseSource.enabled = true;
+		// The third write exceeds VARCHAR(255), after two numeric writes have succeeded.
+		noiseSource.sensorId = "x".repeat(300);
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		assertThat(properties.count()).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='NOISE'", Integer.class)).isZero();
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_feature WHERE category='SAFETY'", Integer.class)).isEqualTo(4);
+	}
+
+	static class StubNoiseSource implements NoiseObservationSource {
+		boolean enabled;
+		boolean fail;
+		int hours = 84;
+		String value = "50";
+		String sensorId = "test-sensor";
+		public List<Sensor> sensors() {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			if (fail) throw new IllegalStateException("Unavailable");
+			return enabled ? List.of(new Sensor(sensorId, LOCATION.lat(), LOCATION.lng())) : List.of();
+		}
+		public List<Observation> observations(Sensor sensor, LocalDateTime start, LocalDateTime end) {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			assertThat(end).isEqualTo(LocalDate.now(ZoneId.of("Asia/Seoul")).atStartOfDay());
+			assertThat(start).isEqualTo(end.minusDays(7));
+			return Stream.iterate(start, time -> time.plusHours(1)).limit(hours)
+				.map(time -> new Observation(sensor.id(), time, value)).toList();
+		}
+	}
+
 	@TestConfiguration(proxyBeanMethods = false)
 	static class StubGeocodingConfiguration {
+		@Bean
+		@Primary
+		StubNoiseSource noiseSource() { return new StubNoiseSource(); }
 		@Bean
 		@Primary
 		StubSafetySource stubSafetySource() { return new StubSafetySource(); }

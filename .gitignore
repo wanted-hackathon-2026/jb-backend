@@ -48,3 +48,4 @@ out/
 
 # Downloaded public safety datasets and geocoded cache (not packaged in the app)
 /data/safety/
+/data/noise/

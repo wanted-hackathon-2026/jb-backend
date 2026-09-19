@@ -39,6 +39,13 @@ auth:
 vworld:
   api-key: ${VWORLD_API_KEY}
 
+seoul:
+  sdot:
+    api-key: ${SEOUL_OPEN_API_KEY:}
+    base-url: ${SDOT_BASE_URL:http://openapi.seoul.go.kr:8088}
+    sensor-file: ${SDOT_SENSOR_FILE:data/noise/sensors.csv}
+    cache-seconds: ${SDOT_CACHE_SECONDS:3600}
+
 swagger:
   google-login:
     enabled: ${SWAGGER_GOOGLE_LOGIN_ENABLED:false}
