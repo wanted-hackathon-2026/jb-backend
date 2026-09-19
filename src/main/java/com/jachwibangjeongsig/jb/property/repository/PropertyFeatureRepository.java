@@ -23,6 +23,15 @@ public interface PropertyFeatureRepository extends JpaRepository<PropertyFeature
 
     @Modifying
     @Query(value = """
+        INSERT INTO property_feature (id, property_id, category, metric_code, text_value, unit, computed_at)
+        VALUES (:id, :propertyId, 'SUNLIGHT', 'SUNLIGHT_ESTIMATE_LEVEL', :level, 'level', :computedAt)
+        ON DUPLICATE KEY UPDATE numeric_value = NULL, text_value = :level, unit = 'level', computed_at = :computedAt
+        """, nativeQuery = true)
+    int upsertSunlightMetric(@Param("id") UUID id, @Param("propertyId") UUID propertyId,
+        @Param("level") String level, @Param("computedAt") LocalDateTime computedAt);
+
+    @Modifying
+    @Query(value = """
         INSERT INTO property_feature (id, property_id, category, metric_code, numeric_value, text_value, unit, computed_at)
         VALUES (:id, :propertyId, 'NOISE', :metricCode, :value, :text, :unit, :computedAt)
         ON DUPLICATE KEY UPDATE numeric_value = :value, text_value = :text, unit = :unit, computed_at = :computedAt

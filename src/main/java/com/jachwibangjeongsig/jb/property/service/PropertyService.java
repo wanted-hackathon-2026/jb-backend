@@ -18,16 +18,19 @@ public class PropertyService {
 	private final SafetyMetricService safetyMetricService;
 	private final NoiseMetricService noiseMetricService;
 	private final InfrastructureMetricService infrastructureMetricService;
+	private final SunlightMetricService sunlightMetricService;
 	private final TransactionTemplate transactionTemplate;
 
 	public PropertyService(PropertyRepository propertyRepository, GeocodingClient geocodingClient,
 		PlatformTransactionManager transactionManager, SafetyMetricService safetyMetricService,
-		NoiseMetricService noiseMetricService, InfrastructureMetricService infrastructureMetricService) {
+		NoiseMetricService noiseMetricService, InfrastructureMetricService infrastructureMetricService,
+		SunlightMetricService sunlightMetricService) {
 		this.propertyRepository = propertyRepository;
 		this.geocodingClient = geocodingClient;
 		this.safetyMetricService = safetyMetricService;
 		this.noiseMetricService = noiseMetricService;
 		this.infrastructureMetricService = infrastructureMetricService;
+		this.sunlightMetricService = sunlightMetricService;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 	}
 
@@ -47,6 +50,7 @@ public class PropertyService {
 		safetyMetricService.collect(property);
 		noiseMetricService.collect(property);
 		infrastructureMetricService.collect(property);
+		sunlightMetricService.collect(property);
 		return property;
 	}
 }
