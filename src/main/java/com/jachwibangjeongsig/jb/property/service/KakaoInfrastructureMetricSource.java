@@ -21,10 +21,10 @@ public class KakaoInfrastructureMetricSource implements InfrastructureMetricSour
     private final RestClient client;
 
     @Autowired
-    public KakaoInfrastructureMetricSource(RestClient.Builder builder,
+    public KakaoInfrastructureMetricSource(
         @Value("${kakao.local.base-url:https://dapi.kakao.com}") String baseUrl,
         @Value("${kakao.local.api-key}") String apiKey) {
-        this(configure(builder).baseUrl(baseUrl)
+        this(configure(RestClient.builder()).baseUrl(baseUrl)
             .defaultHeader(HttpHeaders.AUTHORIZATION, "KakaoAK " + apiKey).build());
     }
 
