@@ -8,6 +8,9 @@ import com.jachwibangjeongsig.jb.property.entity.Property;
 import com.jachwibangjeongsig.jb.property.entity.LeaseType;
 import com.jachwibangjeongsig.jb.property.repository.PropertyRepository;
 import com.jachwibangjeongsig.jb.property.service.CsvSafetyFacilitySource;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricService;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricSource;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricSource.InfrastructureKind;
 import com.jachwibangjeongsig.jb.property.service.NoiseMetricService;
 import com.jachwibangjeongsig.jb.property.service.NoiseObservationSource;
 import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource;
@@ -50,6 +53,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -69,7 +73,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 	"auth.google-client-id=test-google-client-id",
 	"auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
 	"auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
-	"vworld.api-key=test-vworld-api-key"
+	"vworld.api-key=test-vworld-api-key",
+	"kakao.local.api-key=",
+	"infrastructure.bus-stop-file=build/test-data/missing-bus-stops.csv"
 })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -93,12 +99,18 @@ class PropertyApiContractTest {
 	@Autowired SafetyMetricService safetyMetrics;
 	@Autowired StubNoiseSource noiseSource;
 	@Autowired NoiseMetricService noiseMetrics;
+	@Autowired StubInfrastructureSource infrastructureSource;
+	@Autowired InfrastructureMetricService infrastructureMetrics;
 
 	private User admin;
 	private User ordinary;
 
 	@BeforeEach
 	void reset() {
+		infrastructureSource.enabled = false;
+		infrastructureSource.failure = null;
+		infrastructureSource.empty = null;
+		infrastructureSource.additional = false;
 		noiseSource.enabled = false;
 		noiseSource.hours = 84;
 		noiseSource.fail = false;
@@ -685,8 +697,91 @@ class PropertyApiContractTest {
 		}
 	}
 
+	@Test
+	void infrastructureRegistrationStoresSixIndependentMetricsOutsideDatabaseTransaction() throws Exception {
+		infrastructureSource.enabled = true;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+
+		assertThat(jdbc.queryForObject(
+			"SELECT COUNT(*) FROM property_feature WHERE category='INFRASTRUCTURE'", Integer.class)).isEqualTo(6);
+		assertThat(jdbc.queryForObject(
+			"SELECT numeric_value FROM property_feature WHERE metric_code='BUS_STOP_COUNT_500M'", BigDecimal.class))
+			.isEqualByComparingTo("2");
+		assertThat(jdbc.queryForObject(
+			"SELECT numeric_value FROM property_feature WHERE metric_code='NEAREST_SUBWAY_STATION_DISTANCE'",
+			BigDecimal.class)).isGreaterThan(BigDecimal.ZERO);
+	}
+
+	@Test
+	void oneInfrastructureFailureKeepsOtherMetricsAndPropertyRegistration() throws Exception {
+		infrastructureSource.enabled = true;
+		infrastructureSource.failure = InfrastructureKind.PHARMACY;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+
+		assertThat(properties.count()).isEqualTo(1);
+		assertThat(jdbc.queryForObject(
+			"SELECT COUNT(*) FROM property_feature WHERE category='INFRASTRUCTURE'", Integer.class)).isEqualTo(5);
+		assertThat(jdbc.queryForObject(
+			"SELECT COUNT(*) FROM property_feature WHERE metric_code='PHARMACY_COUNT_1KM'", Integer.class)).isZero();
+	}
+
+	@Test
+	void completeEmptyInfrastructureResultStoresRealZero() throws Exception {
+		infrastructureSource.enabled = true;
+		infrastructureSource.empty = InfrastructureKind.BUS_STOP;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+
+		assertThat(jdbc.queryForObject(
+			"SELECT numeric_value FROM property_feature WHERE metric_code='BUS_STOP_COUNT_500M'", BigDecimal.class))
+			.isEqualByComparingTo("0");
+	}
+
+	@Test
+	void infrastructureRecollectionUpdatesSuccessesAndPreservesOnlyFailedMetric() throws Exception {
+		infrastructureSource.enabled = true;
+		create(bearer(admin), seoulBody()).andExpect(status().isCreated());
+		Property property = properties.findAll().getFirst();
+
+		infrastructureSource.additional = true;
+		infrastructureSource.failure = InfrastructureKind.PHARMACY;
+		infrastructureMetrics.collect(property);
+
+		assertThat(jdbc.queryForObject(
+			"SELECT numeric_value FROM property_feature WHERE metric_code='CONVENIENCE_STORE_COUNT_500M'",
+			BigDecimal.class)).isEqualByComparingTo("3");
+		assertThat(jdbc.queryForObject(
+			"SELECT numeric_value FROM property_feature WHERE metric_code='PHARMACY_COUNT_1KM'", BigDecimal.class))
+			.isEqualByComparingTo("2");
+	}
+
+	static class StubInfrastructureSource implements InfrastructureMetricSource {
+		boolean enabled;
+		boolean additional;
+		InfrastructureKind failure;
+		InfrastructureKind empty;
+
+		@Override
+		public boolean supports(InfrastructureKind kind) {
+			return true;
+		}
+
+		@Override
+		public BigDecimal measure(InfrastructureKind kind, double latitude, double longitude) {
+			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+			if (!enabled || kind == failure) throw new IllegalStateException("Test source failure");
+			if (kind == empty) return BigDecimal.ZERO;
+			if (kind == InfrastructureKind.SUBWAY_STATION) {
+				return new BigDecimal("123.456789");
+			}
+			return BigDecimal.valueOf(additional ? 3 : 2);
+		}
+	}
+
 	@TestConfiguration(proxyBeanMethods = false)
 	static class StubGeocodingConfiguration {
+		@Bean
+		@Primary
+		StubInfrastructureSource infrastructureSource() { return new StubInfrastructureSource(); }
 		@Bean
 		@Primary
 		StubNoiseSource noiseSource() { return new StubNoiseSource(); }

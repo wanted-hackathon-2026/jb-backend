@@ -5,6 +5,7 @@ services:
     volumes:
       - ./data/safety:/app/data/safety:ro
       - ./data/noise:/app/data/noise:ro
+      - ./data/infrastructure:/app/data/infrastructure:ro
     environment:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -18,6 +19,8 @@ services:
       SAFETY_CSV_DIRECTORY: /app/data/safety
       SEOUL_OPEN_API_KEY: ${SEOUL_OPEN_API_KEY}
       SDOT_SENSOR_FILE: /app/data/noise/sensors.csv
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      BUS_STOP_FILE: /app/data/infrastructure/bus-stops.csv
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
     ports:
       - "80:8080"
