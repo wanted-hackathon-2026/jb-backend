@@ -2,8 +2,8 @@ package com.jachwibangjeongsig.jb.property;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.jachwibangjeongsig.jb.property.service.InfrastructureFacilitySource.Place;
 import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricCalculator;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricCalculator.Place;
 import com.jachwibangjeongsig.jb.property.service.SafetyMetricCalculator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -34,18 +34,7 @@ class InfrastructureMetricCalculatorContractTest {
     }
 
     @Test
-    void choosesNearestStationWithoutRadiusLimitAndBreaksTiesById() {
-        double offset = Math.toDegrees(2_000.0 / 6_371_008.8);
-
-        assertThat(InfrastructureMetricCalculator.nearestDistance(LAT, LNG, List.of(
-            new Place("b", LAT + offset, LNG),
-            new Place("a", LAT + offset, LNG))).orElseThrow())
-            .isEqualByComparingTo("2000.000000");
-    }
-
-    @Test
-    void emptySuccessfulStationResultHasNoFakeZeroDistance() {
-        assertThat(InfrastructureMetricCalculator.nearestDistance(LAT, LNG, List.of())).isEmpty();
+    void emptySuccessfulRadiusResultIsRealZero() {
         assertThat(InfrastructureMetricCalculator.countWithin(500, LAT, LNG, List.of())).isZero();
     }
 }

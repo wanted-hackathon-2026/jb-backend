@@ -8,10 +8,9 @@ import com.jachwibangjeongsig.jb.property.entity.Property;
 import com.jachwibangjeongsig.jb.property.entity.LeaseType;
 import com.jachwibangjeongsig.jb.property.repository.PropertyRepository;
 import com.jachwibangjeongsig.jb.property.service.CsvSafetyFacilitySource;
-import com.jachwibangjeongsig.jb.property.service.InfrastructureFacilitySource;
-import com.jachwibangjeongsig.jb.property.service.InfrastructureFacilitySource.InfrastructureKind;
-import com.jachwibangjeongsig.jb.property.service.InfrastructureFacilitySource.Place;
 import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricService;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricSource;
+import com.jachwibangjeongsig.jb.property.service.InfrastructureMetricSource.InfrastructureKind;
 import com.jachwibangjeongsig.jb.property.service.NoiseMetricService;
 import com.jachwibangjeongsig.jb.property.service.NoiseObservationSource;
 import com.jachwibangjeongsig.jb.property.service.SafetyFacilitySource;
@@ -753,30 +752,26 @@ class PropertyApiContractTest {
 			.isEqualByComparingTo("2");
 	}
 
-	static class StubInfrastructureSource implements InfrastructureFacilitySource {
+	static class StubInfrastructureSource implements InfrastructureMetricSource {
 		boolean enabled;
 		boolean additional;
 		InfrastructureKind failure;
 		InfrastructureKind empty;
 
 		@Override
-		public List<Place> load(InfrastructureKind kind) {
+		public boolean supports(InfrastructureKind kind) {
+			return true;
+		}
+
+		@Override
+		public BigDecimal measure(InfrastructureKind kind, double latitude, double longitude) {
 			assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
 			if (!enabled || kind == failure) throw new IllegalStateException("Test source failure");
-			if (kind == empty) return List.of();
+			if (kind == empty) return BigDecimal.ZERO;
 			if (kind == InfrastructureKind.SUBWAY_STATION) {
-				return List.of(new Place("near", LOCATION.lat() + 0.001, LOCATION.lng()),
-					new Place("far", LOCATION.lat() + 0.02, LOCATION.lng()));
+				return new BigDecimal("123.456789");
 			}
-			var facilities = new ArrayList<Place>();
-			facilities.add(new Place("here", LOCATION.lat(), LOCATION.lng()));
-			facilities.add(new Place("near", LOCATION.lat() + 0.001, LOCATION.lng()));
-			facilities.add(new Place("here", LOCATION.lat(), LOCATION.lng()));
-			facilities.add(new Place("far", LOCATION.lat() + 0.02, LOCATION.lng()));
-			if (additional) {
-				facilities.add(new Place("additional", LOCATION.lat() + 0.002, LOCATION.lng()));
-			}
-			return facilities;
+			return BigDecimal.valueOf(additional ? 3 : 2);
 		}
 	}
 
