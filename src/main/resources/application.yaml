@@ -46,6 +46,14 @@ seoul:
     sensor-file: ${SDOT_SENSOR_FILE:data/noise/sensors.csv}
     cache-seconds: ${SDOT_CACHE_SECONDS:3600}
 
+kakao:
+  local:
+    api-key: ${KAKAO_REST_API_KEY:}
+    base-url: ${KAKAO_LOCAL_BASE_URL:https://dapi.kakao.com}
+
+infrastructure:
+  bus-stop-file: ${BUS_STOP_FILE:data/infrastructure/bus-stops.csv}
+
 swagger:
   google-login:
     enabled: ${SWAGGER_GOOGLE_LOGIN_ENABLED:false}

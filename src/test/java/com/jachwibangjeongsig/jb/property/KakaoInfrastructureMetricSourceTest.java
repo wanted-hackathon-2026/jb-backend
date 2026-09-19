@@ -27,7 +27,7 @@ class KakaoInfrastructureMetricSourceTest {
             {"meta":{"total_count":123,"pageable_count":45,"is_end":false},"documents":[{"id":"one"}]}
             """, APPLICATION_JSON));
 
-        var source = new KakaoInfrastructureMetricSource(builder, "http://localhost", "test-key");
+        var source = source(builder);
 
         assertThat(source.measure(InfrastructureKind.CONVENIENCE_STORE, LATITUDE, LONGITUDE))
             .isEqualByComparingTo("123");
@@ -45,7 +45,7 @@ class KakaoInfrastructureMetricSourceTest {
                  "documents":[{"id":"station","distance":"123.4567894"}]}
                 """, APPLICATION_JSON));
 
-        var source = new KakaoInfrastructureMetricSource(builder, "http://localhost", "test-key");
+        var source = source(builder);
 
         assertThat(source.measure(InfrastructureKind.SUBWAY_STATION, LATITUDE, LONGITUDE))
             .isEqualByComparingTo("123.456789");
@@ -55,5 +55,10 @@ class KakaoInfrastructureMetricSourceTest {
     private static void assertQuery(URI uri, String... parts) {
         assertThat(uri.getPath()).isEqualTo("/v2/local/search/category.json");
         assertThat(uri.getQuery()).contains(parts).contains("x=127.0", "y=37.5");
+    }
+
+    private static KakaoInfrastructureMetricSource source(RestClient.Builder builder) {
+        return new KakaoInfrastructureMetricSource(builder.baseUrl("http://localhost")
+            .defaultHeader(HttpHeaders.AUTHORIZATION, "KakaoAK test-key").build());
     }
 }
