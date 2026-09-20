@@ -158,7 +158,7 @@ class RecommendationApiContractTest {
 			LocalDateTime.of(2026, 9, 19, 10, 0), older);
 		jdbc.update("UPDATE recommendation SET requested_at = ? WHERE id = UUID_TO_BIN(?)",
 			LocalDateTime.of(2026, 9, 20, 10, 0), newer);
-		request(bearer(stranger), body()).andExpect(status().isAccepted());
+		request(bearer(stranger), guestBody()).andExpect(status().isAccepted());
 
 		mvc.perform(get("/api/recommendations").param("size", "1")
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
