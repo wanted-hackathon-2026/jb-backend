@@ -21,15 +21,32 @@ LLM 호출이 수십 초 걸린다. `POST`는 접수만 하고 `202 Accepted`로
 
 ## 1. `POST /api/recommendations` — 추천 요청
 
-### 인증
+### 인증 — 로그인·비로그인 모두 허용
 
-로그인 + 프로필 완료 필요. `AuthConfig`의 `anyRequest().access(profileAuthorizationManager)`에 이미 걸리므로 별도 등록이 필요 없다.
+추천 4개 엔드포인트는 `AuthConfig`에 `permitAll()`로 등록한다. 기본 게이트 `ProfileAuthorizationManager`가 인증 + 프로필 완료를 동시에 요구해서, 그대로 두면 비로그인이 전부 401이 된다.
+
+근거: 회의 3 — "비로그인 상태에서 사용자 선호도 입력 후 AI 추천 요청 가능해야 함", "비로그인 세션 처리는 데모 버전에도 필수". `recommendation` 테이블의 `chk_recommendation_owner`(user_id XOR client_session_id)가 처음부터 이걸 전제로 설계돼 있다.
+
+| 조건 | 소유자 |
+| --- | --- |
+| 유효한 `Authorization: Bearer` | `recommendation.user_id` |
+| 토큰 없음 + `X-Client-Session` 헤더 | `recommendation.client_session_id` |
+| 토큰 없음 + 헤더 없음 | `400 CLIENT_SESSION_REQUIRED` |
+
+`X-Client-Session`은 **클라이언트가 세션스토리지에 만든 랜덤 UUID**다(회의 3: "세션 스토리지 + 랜덤 UUID"). 서버는 **SHA-256 해시만** `client_session.session_hash_token`에 저장한다 — `refresh_token_session`과 같은 방식이라 DB가 유출돼도 남의 추천을 조회할 원본 토큰이 나오지 않는다.
+
+- 세션 행은 **추천 요청 때만** 만든다. 조회는 이미 있는 세션만 인정하고, 모르는 토큰이면 404로 떨어진다 — 조회만으로 세션이 쌓이면 아무나 행을 만들 수 있다.
+- `expires_at`은 발급 시 +30일. 만료 행 정리 배치는 범위 밖이다.
+- **CORS**: `X-Client-Session`은 기본 허용 헤더가 아니라서 `AuthConfig`의 `allowedHeaders`에 넣어야 한다. 빠뜨리면 브라우저가 프리플라이트에서 헤더를 떨어뜨려 비로그인 요청이 전부 `CLIENT_SESSION_REQUIRED`로 실패한다.
+- **알려진 함정**: permitAll 경로라도 **만료·위조된 `Authorization` 헤더를 보내면 리소스 서버 필터가 401을 낸다** — 익명으로 강등되지 않는다(`property-listing-and-detail.md`에 같은 내용이 있다). 프런트는 로그아웃 상태에서 `Authorization` 헤더를 아예 붙이지 않아야 한다.
+- 비로그인 소유권은 랜덤 UUID를 아는 사람이면 통과한다. 로그인 계정 수준의 보호가 아니며, 그래서 비로그인 추천에는 저장된 프로필 정보가 들어가지 않는다(거점 주소는 사용자가 방금 입력한 값일 뿐이다).
 
 ### 요청 본문
 
 | 이름 | 필수 | 타입 | 제약 |
 | --- | --- | --- | --- |
-| `workplaceId` | 예 | UUID | 요청자 본인의 근무지여야 한다 |
+| `workplaceId` | 택1 | UUID | 저장된 근무지. 요청자 본인의 것이어야 한다 |
+| `workplace` | 택1 | object | 이번 요청에만 쓸 근무지. `{name}`(1~50자), `{roadAddress}`(1~255자) |
 | `transportType` | 예 | enum | `WALK`, `BICYCLE`, `TRANSIT`, `CAR` |
 | `maxCommuteMinutes` | 예 | int | 5~180 |
 | `sunlightImportance` | 예 | int | 1~5 |
@@ -40,7 +57,13 @@ LLM 호출이 수십 초 걸린다. `POST`는 접수만 하고 `202 Accepted`로
 | `monthlyRentMin` / `monthlyRentMax` | 예 | int | 0 이상, min ≤ max. 단위 만원 |
 | `roomTypes` | 예 | string[] | 1~10개, 각 20자 이하, 합쳐서 255자 이하 |
 
-요청 시점의 근무지와 조건은 `recommendation_criteria`에 **스냅샷으로 복사**한다. 근무지나 선호도가 나중에 바뀌어도 지난 추천의 근거는 보존된다.
+**`workplaceId`와 `workplace` 중 정확히 하나만 보낸다.** 둘 다 보내거나 둘 다 빠지면 `400`이다.
+
+- **비로그인 사용자는 `workplace`만 쓸 수 있다.** `workplace` 테이블은 `user_id`가 필수라 거점을 저장할 방법이 없다. 비로그인 요청이 `workplaceId`를 보내면 남의 거점과 똑같이 `404 WORKPLACE_NOT_FOUND`로 존재를 감춘다.
+- 로그인 사용자는 둘 다 쓸 수 있다. 저장하지 않고 한 번만 시험해 보는 주소가 있기 때문이다.
+- `workplace`를 쓰면 **서버가 `roadAddress`를 지오코딩해 좌표를 확정한다.** 좌표를 요청으로 받지 않는 것은 매물·거점 등록과 같은 규칙이다 — 클라이언트가 좌표를 위조하면 통근 반경 필터를 우회할 수 있다.
+
+요청 시점의 근무지와 조건은 `recommendation_criteria`에 **스냅샷으로 복사**한다. 근무지나 선호도가 나중에 바뀌어도 지난 추천의 근거는 보존된다. 스키마가 근무지를 FK가 아니라 컬럼으로 들고 있는 것도 비로그인 사용자에게 거점 행이 없기 때문이다.
 
 ### 응답
 
@@ -82,12 +105,19 @@ LLM 호출이 수십 초 걸린다. `POST`는 접수만 하고 `202 Accepted`로
 
 | 상태 | 코드 | 상황 |
 | --- | --- | --- |
-| 400 | (검증 기본) | 요청 본문이 제약을 어김 |
-| 404 | `WORKPLACE_NOT_FOUND` | 근무지가 없거나 남의 것 |
+| 400 | (검증 기본) | 요청 본문이 제약을 어김. `workplaceId`/`workplace` 동시 지정·동시 누락 포함 |
+| 400 | `CLIENT_SESSION_REQUIRED` | 비로그인인데 `X-Client-Session` 헤더가 없음 |
+| 400 | `ADDRESS_NOT_GEOCODABLE` | 인라인 근무지 주소의 좌표를 찾지 못함 |
+| 404 | `WORKPLACE_NOT_FOUND` | 근무지가 없거나 남의 것. 비로그인이 `workplaceId`를 보낸 경우 포함 |
 | 404 | `RECOMMENDATION_NOT_FOUND` | 추천이 없거나 남의 것, 또는 그 추천에 없는 매물 |
 | 409 | `RECOMMENDATION_NOT_READY` | 아직 `COMPLETED`가 아닌 추천의 결과를 조회 |
+| 502 | `GEOCODING_UNAVAILABLE` | 지오코딩 제공자 장애 |
 
 남의 추천·근무지는 403이 아니라 404로 응답해 존재 자체를 숨긴다.
+
+## 비로그인 지원에 필요한 스키마 변경 — 없음
+
+`client_session` 테이블과 `recommendation.client_session_id`(FK + `chk_recommendation_owner` CHECK)는 **`V2`부터 이미 있었다.** 엔티티가 `user_id`를 `nullable = false`로 잡고 있어 스키마보다 좁았을 뿐이라, 매핑만 넓히면 된다. 새 마이그레이션을 추가하지 않는다.
 
 ## 스키마 변경 (`V9__align_recommendation_tables.sql`)
 
