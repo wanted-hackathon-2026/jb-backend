@@ -34,11 +34,27 @@ DB에는 매물과 사진을 연결하는 메타데이터만 저장한다.
 }
 ```
 
+### PUT `/api/properties/{propertyId}/images/{imageId}`
+
+- 관리자만 호출할 수 있다.
+- `multipart/form-data`의 `file` 필드로 새 사진 한 장을 전송한다.
+- 사진 ID와 `displayOrder`는 유지하고 저장 파일만 교체한다.
+- 성공 시 `200 OK`와 교체된 사진 객체를 반환한다.
+- DB 반영에 실패하면 새로 저장한 파일을 삭제하고 기존 사진을 유지한다.
+
+### DELETE `/api/properties/{propertyId}/images/{imageId}`
+
+- 관리자만 호출할 수 있다.
+- 성공 시 `204 No Content`를 반환한다.
+- 삭제한 사진보다 뒤에 있던 사진의 `displayOrder`를 1씩 당긴다.
+- 따라서 대표 사진을 삭제하면 다음 사진이 대표 사진이 된다.
+
 ## 오류
 
 - 인증 없음 또는 잘못된 토큰: `401 Unauthorized`
 - 관리자 권한 없음: `403 Forbidden`
 - 매물이 존재하지 않음: `404 Not Found`, `PROPERTY_NOT_FOUND`
+- 해당 매물의 사진이 존재하지 않음: `404 Not Found`, `PROPERTY_IMAGE_NOT_FOUND`
 - 파일 없음, 빈 파일 또는 총 10장 초과: `400 Bad Request`, `INVALID_PROPERTY_IMAGE`
 - 파일 한 장이 10MB 초과: `413 Payload Too Large`, `PROPERTY_IMAGE_TOO_LARGE`
 - 지원하지 않거나 내용과 형식이 다른 파일: `415 Unsupported Media Type`, `UNSUPPORTED_PROPERTY_IMAGE_TYPE`
@@ -56,7 +72,7 @@ DB에는 매물과 사진을 연결하는 메타데이터만 저장한다.
 
 ## 이번 범위에서 제외
 
-- 사진 삭제 및 순서 변경
+- 임의 순서 변경
 - 썸네일 리사이징
 - S3 및 CDN
 - 매물 상세·지도 조회 응답에 사진 연결

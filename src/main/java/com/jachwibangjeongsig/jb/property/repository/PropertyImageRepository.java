@@ -17,6 +17,8 @@ public interface PropertyImageRepository extends JpaRepository<PropertyImage, UU
 
 	Optional<PropertyImage> findByPropertyIdAndStorageKey(UUID propertyId, String storageKey);
 
+	Optional<PropertyImage> findByIdAndPropertyId(UUID id, UUID propertyId);
+
 	List<PropertyImage> findByPropertyIdOrderByDisplayOrderAsc(UUID propertyId);
 
 	@Query("select i.property.id as propertyId, i.storageKey as storageKey from PropertyImage i "

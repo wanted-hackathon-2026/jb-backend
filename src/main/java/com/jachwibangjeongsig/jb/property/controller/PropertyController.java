@@ -14,8 +14,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,6 +50,18 @@ public class PropertyController {
 	public ResponseEntity<PropertyImageResponse> uploadImages(@PathVariable UUID propertyId,
 		@RequestPart("files") List<MultipartFile> files) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(propertyImageService.upload(propertyId, files));
+	}
+
+	@PutMapping(path = "/{propertyId}/images/{imageId}", consumes = "multipart/form-data")
+	public PropertyImageResponse.Image replaceImage(@PathVariable UUID propertyId, @PathVariable UUID imageId,
+		@RequestPart("file") MultipartFile file) {
+		return propertyImageService.replace(propertyId, imageId, file);
+	}
+
+	@DeleteMapping("/{propertyId}/images/{imageId}")
+	public ResponseEntity<Void> deleteImage(@PathVariable UUID propertyId, @PathVariable UUID imageId) {
+		propertyImageService.delete(propertyId, imageId);
+		return ResponseEntity.noContent().build();
 	}
 
 	@GetMapping("/map")

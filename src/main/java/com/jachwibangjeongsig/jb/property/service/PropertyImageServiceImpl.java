@@ -73,11 +73,58 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 	}
 
 	@Override
+	public PropertyImageResponse.Image replace(UUID propertyId, UUID imageId, MultipartFile file) {
+		PropertyImage image = findImage(propertyId, imageId);
+		String extension = storage.validate(file);
+		String newStorageKey = storage.store(propertyId, file, extension);
+		String oldStorageKey = image.getStorageKey();
+		try {
+			PropertyImage saved = transactionTemplate.execute(status -> {
+				image.replaceStorageKey(newStorageKey);
+				return imageRepository.saveAndFlush(image);
+			});
+			storage.delete(oldStorageKey);
+			return PropertyImageResponse.Image.from(saved);
+		} catch (RuntimeException exception) {
+			storage.delete(newStorageKey);
+			throw new PropertyImageException(HttpStatus.INTERNAL_SERVER_ERROR,
+				"PROPERTY_IMAGE_STORAGE_FAILED", "사진 교체에 실패했습니다.", exception);
+		}
+	}
+
+	@Override
+	public void delete(UUID propertyId, UUID imageId) {
+		PropertyImage image = findImage(propertyId, imageId);
+		String storageKey = image.getStorageKey();
+		int deletedOrder = image.getDisplayOrder();
+		transactionTemplate.executeWithoutResult(status -> {
+			imageRepository.delete(image);
+			imageRepository.flush();
+			List<PropertyImage> remaining = imageRepository.findByPropertyIdOrderByDisplayOrderAsc(propertyId);
+			for (PropertyImage remainingImage : remaining) {
+				if (remainingImage.getDisplayOrder() > deletedOrder) {
+					remainingImage.changeDisplayOrder(remainingImage.getDisplayOrder() - 1);
+					imageRepository.saveAndFlush(remainingImage);
+				}
+			}
+		});
+		storage.delete(storageKey);
+	}
+
+	@Override
 	public Resource read(UUID propertyId, String filename) {
 		String storageKey = propertyId + "/" + filename;
 		imageRepository.findByPropertyIdAndStorageKey(propertyId, storageKey)
 			.orElseThrow(() -> error(HttpStatus.NOT_FOUND, "PROPERTY_IMAGE_NOT_FOUND", "사진을 찾을 수 없습니다."));
 		return storage.load(storageKey);
+	}
+
+	private PropertyImage findImage(UUID propertyId, UUID imageId) {
+		if (!propertyRepository.existsById(propertyId)) {
+			throw error(HttpStatus.NOT_FOUND, "PROPERTY_NOT_FOUND", "매물을 찾을 수 없습니다.");
+		}
+		return imageRepository.findByIdAndPropertyId(imageId, propertyId)
+			.orElseThrow(() -> error(HttpStatus.NOT_FOUND, "PROPERTY_IMAGE_NOT_FOUND", "사진을 찾을 수 없습니다."));
 	}
 
 	private PropertyImageException error(HttpStatus status, String code, String message) {

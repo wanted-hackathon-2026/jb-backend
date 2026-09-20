@@ -51,4 +51,12 @@ public class PropertyImage {
 		this.storageKey = storageKey;
 		this.displayOrder = displayOrder;
 	}
+
+	public void replaceStorageKey(String storageKey) {
+		this.storageKey = storageKey;
+	}
+
+	public void changeDisplayOrder(int displayOrder) {
+		this.displayOrder = displayOrder;
+	}
 }
