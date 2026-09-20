@@ -36,6 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -194,6 +195,24 @@ class MyAccountAndFavoriteApiContractTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.content[0].favoriteId").value(old.toString()))
             .andExpect(jsonPath("$.last").value(true));
+    }
+
+    @Test
+    void favoriteListIncludesThumbnailUrlOnlyWhenPropertyHasAPhoto() throws Exception {
+        UUID withPhoto = property("사진 있는 매물");
+        propertyImage(withPhoto, 1, withPhoto + "/second.jpg");
+        propertyImage(withPhoto, 0, withPhoto + "/first.jpg");
+        UUID withoutPhoto = property("사진 없는 매물");
+        favorite(me, withPhoto, "2026-09-17 12:00:00");
+        favorite(me, withoutPhoto, "2026-09-16 12:00:00");
+
+        as(me, get("/api/me/favorites"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].property.id").value(withPhoto.toString()))
+            .andExpect(jsonPath("$.content[0].property.thumbnailUrl")
+                .value("/api/property-images/" + withPhoto + "/first.jpg"))
+            .andExpect(jsonPath("$.content[1].property.id").value(withoutPhoto.toString()))
+            .andExpect(jsonPath("$.content[1].property.thumbnailUrl").value(nullValue()));
     }
 
     @ParameterizedTest
@@ -380,6 +399,13 @@ class MyAccountAndFavoriteApiContractTest {
                 '2026-09-16 12:00:00', '2026-09-16 12:00:00')
             """, binary(id), name);
         return id;
+    }
+
+    private void propertyImage(UUID propertyId, int displayOrder, String storageKey) {
+        jdbc.update("""
+            INSERT INTO property_image (id, property_id, storage_key, display_order, created_at)
+            VALUES (?, ?, ?, ?, '2026-09-16 12:00:00')
+            """, binary(UUID.randomUUID()), binary(propertyId), storageKey, displayOrder);
     }
 
     private UUID favorite(User user, UUID property, String createdAt) {

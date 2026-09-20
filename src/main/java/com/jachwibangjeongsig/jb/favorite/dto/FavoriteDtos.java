@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class FavoriteDtos {
@@ -16,10 +17,12 @@ public final class FavoriteDtos {
         public static Created from(Favorite f) { return new Created(f.getId(), f.getProperty().getId(), f.getCreatedAt()); }
     }
     public record Summary(UUID id, String name, String address, String roadAddress, String propertyType,
-                          LeaseType leaseType, int deposit, int monthlyRent, BigDecimal exclusiveArea, Integer floor, Integer buildYear) {
-        public static Summary from(Property p) {
+                          LeaseType leaseType, int deposit, int monthlyRent, BigDecimal exclusiveArea, Integer floor,
+                          Integer buildYear, String thumbnailUrl) {
+        public static Summary from(Property p, String thumbnailUrl) {
             return new Summary(p.getId(), p.getName(), p.getAddress(), p.getRoadAddress(), p.getPropertyType(),
-                p.getLeaseType(), p.getDeposit(), p.getMonthlyRent(), p.getExclusiveArea(), p.getFloor(), p.getBuildYear());
+                p.getLeaseType(), p.getDeposit(), p.getMonthlyRent(), p.getExclusiveArea(), p.getFloor(),
+                p.getBuildYear(), thumbnailUrl);
         }
     }
     public record Detail(UUID id, String name, String address, String roadAddress, String sggCode,
@@ -33,15 +36,18 @@ public final class FavoriteDtos {
         }
     }
     public record Item(UUID favoriteId, LocalDateTime createdAt, Summary property) {
-        public static Item from(Favorite f) { return new Item(f.getId(), f.getCreatedAt(), Summary.from(f.getProperty())); }
+        public static Item from(Favorite f, String thumbnailUrl) {
+            return new Item(f.getId(), f.getCreatedAt(), Summary.from(f.getProperty(), thumbnailUrl));
+        }
     }
     public record Detailed(UUID favoriteId, LocalDateTime createdAt, Detail property) {
         public static Detailed from(Favorite f) { return new Detailed(f.getId(), f.getCreatedAt(), Detail.from(f.getProperty())); }
     }
     public record Listing(List<Item> content, int page, int size, long totalElements, int totalPages, boolean last) {
-        public static Listing from(Page<Favorite> p) {
-            return new Listing(p.getContent().stream().map(Item::from).toList(), p.getNumber(),
-                p.getSize(), p.getTotalElements(), p.getTotalPages(), p.isLast());
+        public static Listing from(Page<Favorite> p, Map<UUID, String> thumbnailsByPropertyId) {
+            return new Listing(p.getContent().stream()
+                .map(f -> Item.from(f, thumbnailsByPropertyId.get(f.getProperty().getId())))
+                .toList(), p.getNumber(), p.getSize(), p.getTotalElements(), p.getTotalPages(), p.isLast());
         }
     }
 }
