@@ -10,6 +10,7 @@ import com.jachwibangjeongsig.jb.property.repository.PropertyImageRepository.Thu
 import com.jachwibangjeongsig.jb.property.repository.PropertyRepository;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationCreateRequest;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationEvaluation;
+import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationHistoryResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendedPropertyDetailResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendedPropertyResponse;
 import com.jachwibangjeongsig.jb.recommendation.entity.Recommendation;
@@ -25,6 +26,9 @@ import com.jachwibangjeongsig.jb.recommendation.repository.RecommendationResultR
 import com.jachwibangjeongsig.jb.workplace.exception.AddressNotGeocodableException;
 import com.jachwibangjeongsig.jb.workplace.entity.Workplace;
 import com.jachwibangjeongsig.jb.workplace.repository.WorkplaceRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -85,6 +89,21 @@ public class RecommendationService {
 			? recommendations.findByIdAndUserId(recommendationId, owner.userId())
 			: recommendations.findByIdAndClientSessionId(recommendationId, owner.clientSessionId()))
 			.orElseThrow(RecommendationNotFoundException::new);
+	}
+
+	public RecommendationHistoryResponse history(RecommendationOwner owner, int page, int size) {
+		PageRequest pageable = PageRequest.of(page, size,
+			Sort.by(Sort.Order.desc("requestedAt"), Sort.Order.desc("id")));
+		Page<Recommendation> history = owner.isLoggedIn()
+			? recommendations.findAllByUserId(owner.userId(), pageable)
+			: recommendations.findAllByClientSessionId(owner.clientSessionId(), pageable);
+		List<UUID> recommendationIds = history.getContent().stream().map(Recommendation::getId).toList();
+		Map<UUID, RecommendationCriteria> criteriaByRecommendationId = new HashMap<>();
+		if (!recommendationIds.isEmpty()) {
+			criteriaRepository.findByRecommendationIdIn(recommendationIds)
+				.forEach(criteria -> criteriaByRecommendationId.put(criteria.getRecommendationId(), criteria));
+		}
+		return RecommendationHistoryResponse.from(history, criteriaByRecommendationId);
 	}
 
 	public RecommendedPropertyResponse properties(RecommendationOwner owner, UUID recommendationId) {
