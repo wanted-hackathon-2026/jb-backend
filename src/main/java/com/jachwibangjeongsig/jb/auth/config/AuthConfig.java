@@ -67,7 +67,7 @@ public class AuthConfig {
 				.requestMatchers(HttpMethod.GET, "/api/address/search").permitAll()
 				// 비로그인 사용자도 추천을 요청하고 결과를 볼 수 있어야 한다(회의 3 결정).
 				.requestMatchers(HttpMethod.POST, "/api/recommendations").permitAll()
-				.requestMatchers(HttpMethod.GET, "/api/recommendations", "/api/recommendations/*",
+				.requestMatchers(HttpMethod.GET, "/api/recommendations/*",
 					"/api/recommendations/*/properties", "/api/recommendations/*/properties/*").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.PATCH, "/api/me").authenticated()
