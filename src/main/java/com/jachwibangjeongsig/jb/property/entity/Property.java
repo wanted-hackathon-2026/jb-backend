@@ -66,7 +66,13 @@ public class Property extends BaseTimeEntity {
 	@Column(name = "exclusive_area", precision = 8, scale = 2)
 	private BigDecimal exclusiveArea;
 
+	@Column(name = "supply_area", precision = 8, scale = 2)
+	private BigDecimal supplyArea;
+
 	private Integer floor;
+
+	@Column(name = "bathroom_count")
+	private Integer bathroomCount;
 
 	@Column(name = "total_floors")
 	private Integer totalFloors;
@@ -83,8 +89,8 @@ public class Property extends BaseTimeEntity {
 	@Builder
 	private Property(String name, String address, String roadAddress, String sggCode, String umdName,
 		double lat, double lng, String propertyType, LeaseType leaseType, int deposit, int monthlyRent,
-		BigDecimal exclusiveArea, Integer floor, Integer totalFloors, Integer buildYear,
-		String direction, String description) {
+		BigDecimal exclusiveArea, BigDecimal supplyArea, Integer floor, Integer bathroomCount,
+		Integer totalFloors, Integer buildYear, String direction, String description) {
 		this.name = name;
 		this.address = address;
 		this.roadAddress = roadAddress;
@@ -97,7 +103,9 @@ public class Property extends BaseTimeEntity {
 		this.deposit = deposit;
 		this.monthlyRent = monthlyRent;
 		this.exclusiveArea = exclusiveArea;
+		this.supplyArea = supplyArea;
 		this.floor = floor;
+		this.bathroomCount = bathroomCount;
 		this.totalFloors = totalFloors;
 		this.buildYear = buildYear;
 		this.direction = direction;

@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -16,7 +17,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class AuthExceptionHandler {
 
 	@ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
-		HandlerMethodValidationException.class, MethodArgumentTypeMismatchException.class})
+		HandlerMethodValidationException.class, MethodArgumentTypeMismatchException.class,
+		MissingServletRequestParameterException.class})
 	ResponseEntity<Map<String, Object>> invalidRequest(Exception exception, HttpServletRequest request) {
 		return response(
 			HttpStatus.BAD_REQUEST,

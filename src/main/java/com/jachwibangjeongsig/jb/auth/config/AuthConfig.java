@@ -63,6 +63,7 @@ public class AuthConfig {
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/property-images/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/properties/map", "/api/properties/*").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.PATCH, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.POST, "/api/properties").access(
