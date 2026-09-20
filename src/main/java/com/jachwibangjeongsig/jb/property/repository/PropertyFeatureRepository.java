@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public interface PropertyFeatureRepository extends JpaRepository<PropertyFeature, UUID> {
@@ -49,4 +50,7 @@ public interface PropertyFeatureRepository extends JpaRepository<PropertyFeature
     int upsertSafetyMetric(@Param("id") UUID id, @Param("propertyId") UUID propertyId,
         @Param("metricCode") String metricCode, @Param("value") BigDecimal value,
         @Param("unit") String unit, @Param("computedAt") LocalDateTime computedAt);
+
+    // 지금까지 쓰기 전용이었다. 추천 프롬프트에 넣을 읽기 경로.
+    List<PropertyFeature> findByPropertyIdIn(List<UUID> propertyIds);
 }
