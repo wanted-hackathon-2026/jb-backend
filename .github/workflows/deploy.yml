@@ -55,8 +55,13 @@ jobs:
             set -e
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd ~/app
+            # 옛 배포 이미지는 :커밋SHA 태그가 붙어 dangling 이 아니다. prune -f 로는
+            # 안 지워져 배포마다 쌓였고, 결국 디스크가 차서 pull 이 실패했다.
+            # -a 는 컨테이너가 참조하지 않는 이미지만 지우므로 지금 떠 있는 앱과 MySQL 은 남는다.
+            # pull 앞에서 비워야 정작 공간이 필요한 시점에 여유가 생긴다.
+            docker image prune -af
             APP_IMAGE="$APP_IMAGE" docker compose -f compose.prod.yaml up -d --pull always
-            docker image prune -f
+            df -h / | tail -1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
