@@ -62,9 +62,13 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 				return imageRepository.saveAllAndFlush(images);
 			});
 			return new PropertyImageResponse(propertyId, saved.stream().map(PropertyImageResponse.Image::from).toList());
-		} catch (RuntimeException exception) {
+		} catch (PropertyImageException exception) {
 			storedKeys.forEach(storage::delete);
 			throw exception;
+		} catch (RuntimeException exception) {
+			storedKeys.forEach(storage::delete);
+			throw new PropertyImageException(HttpStatus.INTERNAL_SERVER_ERROR,
+				"PROPERTY_IMAGE_STORAGE_FAILED", "사진 저장에 실패했습니다.", exception);
 		}
 	}
 

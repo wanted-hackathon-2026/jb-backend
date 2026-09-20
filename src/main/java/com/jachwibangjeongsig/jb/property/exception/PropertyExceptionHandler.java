@@ -23,7 +23,7 @@ public class PropertyExceptionHandler {
 
 	@ExceptionHandler(MaxUploadSizeExceededException.class)
 	ResponseEntity<Map<String, Object>> imageTooLarge(HttpServletRequest request) {
-		return response(HttpStatus.PAYLOAD_TOO_LARGE, "PROPERTY_IMAGE_TOO_LARGE",
+		return response(HttpStatus.CONTENT_TOO_LARGE, "PROPERTY_IMAGE_TOO_LARGE",
 			"사진은 장당 10MB 이하여야 합니다.", request);
 	}
 

@@ -30,7 +30,7 @@ public class LocalPropertyImageStorage {
 			throw error(HttpStatus.BAD_REQUEST, "INVALID_PROPERTY_IMAGE", "빈 사진은 등록할 수 없습니다.");
 		}
 		if (file.getSize() > MAX_FILE_SIZE) {
-			throw error(HttpStatus.PAYLOAD_TOO_LARGE, "PROPERTY_IMAGE_TOO_LARGE", "사진은 장당 10MB 이하여야 합니다.");
+			throw error(HttpStatus.CONTENT_TOO_LARGE, "PROPERTY_IMAGE_TOO_LARGE", "사진은 장당 10MB 이하여야 합니다.");
 		}
 		try (InputStream input = file.getInputStream()) {
 			byte[] header = input.readNBytes(12);
