@@ -28,6 +28,19 @@ public class WorkplaceExceptionHandler {
 		);
 	}
 
+	@ExceptionHandler(WorkplaceNotFoundException.class)
+	ResponseEntity<Map<String, Object>> notFound(
+		WorkplaceNotFoundException exception,
+		HttpServletRequest request
+	) {
+		return response(
+			HttpStatus.NOT_FOUND,
+			"WORKPLACE_NOT_FOUND",
+			exception.getMessage(),
+			request
+		);
+	}
+
 	@ExceptionHandler(GeocodingUnavailableException.class)
 	ResponseEntity<Map<String, Object>> unavailable(
 		GeocodingUnavailableException exception,

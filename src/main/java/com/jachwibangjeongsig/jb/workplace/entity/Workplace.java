@@ -46,6 +46,16 @@ public class Workplace extends BaseTimeEntity {
 	@Column(nullable = false)
 	private double lng;
 
+	public void rename(String name) {
+		this.name = name;
+	}
+
+	public void relocate(String roadAddress, double lat, double lng) {
+		this.roadAddress = roadAddress;
+		this.lat = lat;
+		this.lng = lng;
+	}
+
 	@Builder
 	private Workplace(
 		User user,
