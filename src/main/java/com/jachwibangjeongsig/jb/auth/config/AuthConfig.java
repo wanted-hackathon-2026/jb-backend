@@ -65,6 +65,10 @@ public class AuthConfig {
 				.requestMatchers(HttpMethod.GET, "/api/property-images/**").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/properties/map", "/api/properties/*").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/address/search").permitAll()
+				// 비로그인 사용자도 추천을 요청하고 결과를 볼 수 있어야 한다(회의 3 결정).
+				.requestMatchers(HttpMethod.POST, "/api/recommendations").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/recommendations/*",
+					"/api/recommendations/*/properties", "/api/recommendations/*/properties/*").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.PATCH, "/api/me").authenticated()
 				.requestMatchers(HttpMethod.POST, "/api/properties").access(
@@ -107,7 +111,7 @@ public class AuthConfig {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(properties.allowedOrigins());
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Client-Session"));
 		configuration.setAllowCredentials(true);
 
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

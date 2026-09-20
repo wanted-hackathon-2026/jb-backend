@@ -2,6 +2,7 @@ package com.jachwibangjeongsig.jb.recommendation.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.jachwibangjeongsig.jb.recommendation.entity.TransportType;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -15,7 +16,8 @@ import java.util.List;
 import java.util.UUID;
 
 public record RecommendationCreateRequest(
-	@NotNull UUID workplaceId,
+	UUID workplaceId,
+	@Valid Workplace workplace,
 	@NotNull TransportType transportType,
 	@NotNull @Min(5) @Max(180) Integer maxCommuteMinutes,
 	@NotNull @Min(1) @Max(5) Integer sunlightImportance,
@@ -28,6 +30,22 @@ public record RecommendationCreateRequest(
 	@NotNull @PositiveOrZero Integer monthlyRentMax,
 	@NotEmpty @Size(max = 10) List<@NotBlank @Size(max = 20) String> roomTypes
 ) {
+
+	/**
+	 * 거점은 저장된 것을 고르거나(workplaceId) 이번 요청에만 쓸 주소를 직접 넣는다(workplace).
+	 * 비로그인 사용자는 거점을 저장할 수 없으므로 후자만 쓸 수 있다.
+	 */
+	public record Workplace(
+		@NotBlank @Size(max = 50) String name,
+		@NotBlank @Size(max = 255) String roadAddress
+	) {
+	}
+
+	@JsonIgnore
+	@AssertTrue(message = "workplaceId 와 workplace 중 정확히 하나만 보내야 합니다.")
+	public boolean isExactlyOneWorkplaceGiven() {
+		return (workplaceId == null) != (workplace == null);
+	}
 
 	@JsonIgnore
 	@AssertTrue(message = "최솟값은 최댓값보다 클 수 없습니다.")

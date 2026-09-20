@@ -30,8 +30,12 @@ public class Recommendation {
 	@Column(columnDefinition = "BINARY(16)")
 	private UUID id;
 
-	@Column(name = "user_id", nullable = false, columnDefinition = "BINARY(16)")
+	// 스키마의 chk_recommendation_owner 가 둘 중 정확히 하나만 채워지도록 막는다.
+	@Column(name = "user_id", columnDefinition = "BINARY(16)")
 	private UUID userId;
+
+	@Column(name = "client_session_id", columnDefinition = "BINARY(16)")
+	private UUID clientSessionId;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -49,9 +53,14 @@ public class Recommendation {
 	@Column(name = "failure_reason", length = MAX_FAILURE_REASON)
 	private String failureReason;
 
-	public static Recommendation pending(UUID userId, LocalDateTime requestedAt) {
+	/** 저장 시점이 아니라 생성 시점에 터지도록 XOR 를 여기서도 막는다. */
+	public static Recommendation pending(UUID userId, UUID clientSessionId, LocalDateTime requestedAt) {
+		if ((userId == null) == (clientSessionId == null)) {
+			throw new IllegalArgumentException("Exactly one of userId and clientSessionId must be set");
+		}
 		Recommendation recommendation = new Recommendation();
 		recommendation.userId = userId;
+		recommendation.clientSessionId = clientSessionId;
 		recommendation.status = RecommendationStatus.PENDING;
 		recommendation.requestedAt = requestedAt;
 		return recommendation;

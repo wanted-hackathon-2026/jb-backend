@@ -1,6 +1,9 @@
 package com.jachwibangjeongsig.jb.recommendation;
 
 import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 import com.jachwibangjeongsig.jb.global.llm.LlmClient;
 import com.jachwibangjeongsig.jb.global.llm.LlmUnavailableException;
 import com.jachwibangjeongsig.jb.property.entity.LeaseType;
@@ -41,6 +44,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -73,6 +77,7 @@ class RecommendationApiContractTest {
 	private static final double WORKPLACE_LNG = 127.0;
 	/** 위도 1도는 약 111km. 1km 남짓 떨어뜨리는 값이다. */
 	private static final double ONE_KILOMETRE = 1 / 111.0;
+	private static final String CLIENT_SESSION = "X-Client-Session";
 
 	@Autowired MockMvc mvc;
 	@Autowired ObjectMapper json;
@@ -82,6 +87,7 @@ class RecommendationApiContractTest {
 	@Autowired WorkplaceRepository workplaces;
 	@Autowired PropertyRepository properties;
 	@Autowired StubLlmClient llm;
+	@Autowired StubGeocodingClient geocoding;
 
 	private User owner;
 	private User stranger;
@@ -97,7 +103,10 @@ class RecommendationApiContractTest {
 		jdbc.update("DELETE FROM property");
 		jdbc.update("DELETE FROM workplace");
 		jdbc.update("DELETE FROM users");
+		jdbc.update("DELETE FROM client_session");
 		llm.reset();
+		geocoding.result = Optional.of(new Coordinates(WORKPLACE_LAT, WORKPLACE_LNG));
+		geocoding.failure = null;
 		owner = saveUser("owner");
 		stranger = saveUser("stranger");
 		workplace = workplaces.save(Workplace.builder().user(owner).name("본사")
@@ -300,6 +309,161 @@ class RecommendationApiContractTest {
 		request(bearer(owner), body).andExpect(status().isBadRequest());
 	}
 
+	@Test
+	void servesAGuestIdentifiedOnlyByTheClientSessionHeader() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+		String token = UUID.randomUUID().toString();
+
+		String recommendationId = guestRequest(token, guestBody())
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.status").value("PENDING"))
+			.andReturn().getResponse().getContentAsString()
+			.replaceAll(".*\"recommendationId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+
+		mvc.perform(get("/api/recommendations/" + recommendationId).header(CLIENT_SESSION, token))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("COMPLETED"));
+
+		mvc.perform(get("/api/recommendations/" + recommendationId + "/properties")
+				.header(CLIENT_SESSION, token))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].evaluation.rank").value(1));
+	}
+
+	@Test
+	void storesOnlyTheHashOfTheGuestToken() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+		String token = UUID.randomUUID().toString();
+
+		guestRequest(token, guestBody()).andExpect(status().isAccepted());
+
+		List<String> stored = jdbc.queryForList(
+			"SELECT session_hash_token FROM client_session", String.class);
+		assertThat(stored).hasSize(1);
+		assertThat(stored.getFirst()).isNotEqualTo(token).hasSize(64);
+	}
+
+	@Test
+	void reusesTheSameSessionRowForRepeatedRequests() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+		String token = UUID.randomUUID().toString();
+
+		guestRequest(token, guestBody()).andExpect(status().isAccepted());
+		guestRequest(token, guestBody()).andExpect(status().isAccepted());
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM client_session", Integer.class)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM recommendation", Integer.class)).isEqualTo(2);
+	}
+
+	@Test
+	void keepsOneGuestFromReadingAnothers() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+		String mine = UUID.randomUUID().toString();
+		String recommendationId = guestRequest(mine, guestBody())
+			.andReturn().getResponse().getContentAsString()
+			.replaceAll(".*\"recommendationId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+
+		mvc.perform(get("/api/recommendations/" + recommendationId)
+				.header(CLIENT_SESSION, UUID.randomUUID().toString()))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("RECOMMENDATION_NOT_FOUND"));
+
+		mvc.perform(get("/api/recommendations/" + recommendationId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isNotFound());
+
+		mvc.perform(get("/api/recommendations/" + recommendationId).header(CLIENT_SESSION, mine))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void keepsAGuestFromReadingALoggedInUsersRecommendation() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+		String recommendationId = requestAndExtractId();
+
+		mvc.perform(get("/api/recommendations/" + recommendationId)
+				.header(CLIENT_SESSION, UUID.randomUUID().toString()))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("RECOMMENDATION_NOT_FOUND"));
+	}
+
+	@Test
+	void rejectsAGuestRequestWithoutTheClientSessionHeader() throws Exception {
+		mvc.perform(post("/api/recommendations").contentType(APPLICATION_JSON)
+				.content(json.writeValueAsString(guestBody())))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("CLIENT_SESSION_REQUIRED"));
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM recommendation", Integer.class)).isZero();
+	}
+
+	@Test
+	void refusesAGuestPointingAtASavedWorkplace() throws Exception {
+		// 비로그인 사용자는 거점을 가질 수 없다. 남의 거점처럼 존재를 감춘다.
+		guestRequest(UUID.randomUUID().toString(), body())
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("WORKPLACE_NOT_FOUND"));
+	}
+
+	@Test
+	void requiresExactlyOneWorkplaceForm() throws Exception {
+		Map<String, Object> both = guestBody();
+		both.put("workplaceId", workplace.getId().toString());
+		guestRequest(UUID.randomUUID().toString(), both)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+		Map<String, Object> neither = guestBody();
+		neither.remove("workplace");
+		guestRequest(UUID.randomUUID().toString(), neither)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+	}
+
+	@Test
+	void letsALoggedInUserSupplyAnInlineWorkplaceToo() throws Exception {
+		saveProperty("가까운 원룸", 1, 1000, 50);
+
+		request(bearer(owner), guestBody()).andExpect(status().isAccepted());
+
+		assertThat(jdbc.queryForObject(
+			"SELECT workplace_name FROM recommendation_criteria", String.class)).isEqualTo("이번만 쓰는 회사");
+	}
+
+	@Test
+	void reportsBadRequestWhenTheInlineWorkplaceCannotBeGeocoded() throws Exception {
+		geocoding.result = Optional.empty();
+
+		guestRequest(UUID.randomUUID().toString(), guestBody())
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("ADDRESS_NOT_GEOCODABLE"));
+
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM recommendation", Integer.class)).isZero();
+	}
+
+	@Test
+	void reportsBadGatewayWhenGeocodingIsDown() throws Exception {
+		geocoding.failure = new GeocodingUnavailableException("boom");
+
+		guestRequest(UUID.randomUUID().toString(), guestBody())
+			.andExpect(status().isBadGateway())
+			.andExpect(jsonPath("$.code").value("GEOCODING_UNAVAILABLE"));
+	}
+
+	private ResultActions guestRequest(String token, Map<String, Object> body) throws Exception {
+		return mvc.perform(post("/api/recommendations").header(CLIENT_SESSION, token)
+			.contentType(APPLICATION_JSON).content(json.writeValueAsString(body)));
+	}
+
+	/** 저장된 거점 대신 이번 요청에만 쓸 주소를 넣은 본문. */
+	private Map<String, Object> guestBody() {
+		Map<String, Object> body = body();
+		body.remove("workplaceId");
+		body.put("workplace", Map.of("name", "이번만 쓰는 회사", "roadAddress", "서울 강남구 강남대로 1"));
+		return body;
+	}
+
 	private String requestAndExtractId() throws Exception {
 		return request(bearer(owner), body()).andExpect(status().isAccepted())
 			.andReturn().getResponse().getContentAsString()
@@ -386,8 +550,29 @@ class RecommendationApiContractTest {
 		}
 	}
 
+	/** 인라인 거점은 서버가 지오코딩한다. 네트워크를 타지 않게 고정한다. */
+	static class StubGeocodingClient implements GeocodingClient {
+
+		Optional<Coordinates> result = Optional.empty();
+		RuntimeException failure;
+
+		@Override
+		public Optional<Coordinates> locate(String roadAddress) {
+			if (failure != null) {
+				throw failure;
+			}
+			return result;
+		}
+	}
+
 	@TestConfiguration(proxyBeanMethods = false)
 	static class StubConfiguration {
+
+		@Bean
+		@Primary
+		StubGeocodingClient stubGeocodingClient() {
+			return new StubGeocodingClient();
+		}
 
 		@Bean
 		@Primary
