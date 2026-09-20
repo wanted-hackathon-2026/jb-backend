@@ -23,6 +23,9 @@ services:
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       BUS_STOP_FILE: /app/data/infrastructure/bus-stops.csv
       PROPERTY_IMAGE_DIRECTORY: /app/data/property-images
+
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
     ports:
       - "80:8080"
