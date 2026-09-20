@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -50,7 +51,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PropertyImageApiContractTest {
 
 	private static final Path IMAGE_DIRECTORY = Path.of("build/test-property-images");
+	private static final byte[] JPEG = {(byte) 0xff, (byte) 0xd8, (byte) 0xff};
 	private static final byte[] PNG = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+	private static final byte[] WEBP = {0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50};
 
 	@Container
 	@ServiceConnection
@@ -116,6 +119,42 @@ class PropertyImageApiContractTest {
 		upload(admin, property.getId(), image("second.png"))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.images[0].displayOrder").value(1));
+	}
+
+	@Test
+	void jpegAndWebpAreDetectedFromContentAndServedWithStoredTypes() throws Exception {
+		var result = upload(admin, property.getId(),
+			new MockMultipartFile("files", "wrong.bin", "application/octet-stream", JPEG),
+			new MockMultipartFile("files", "wrong.bin", "application/octet-stream", WEBP))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.images[0].url").value(endsWith(".jpg")))
+			.andExpect(jsonPath("$.images[1].url").value(endsWith(".webp")))
+			.andReturn();
+
+		JsonNode body = json.readTree(result.getResponse().getContentAsString());
+		mvc.perform(get(body.path("images").get(0).path("url").asString()))
+			.andExpect(status().isOk()).andExpect(header().string(HttpHeaders.CONTENT_TYPE, "image/jpeg"));
+		mvc.perform(get(body.path("images").get(1).path("url").asString()))
+			.andExpect(status().isOk()).andExpect(header().string(HttpHeaders.CONTENT_TYPE, "image/webp"));
+	}
+
+	@Test
+	void databaseFailureReturnsSpecifiedErrorAndRemovesWrittenFile() throws Exception {
+		jdbc.execute("""
+			ALTER TABLE property_image ADD CONSTRAINT chk_forced_property_image_failure
+			CHECK (storage_key = 'forced-impossible-value')
+			""");
+		try {
+			upload(admin, property.getId(), image("room.png"))
+				.andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.code").value("PROPERTY_IMAGE_STORAGE_FAILED"));
+			assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_image", Long.class)).isZero();
+			try (var paths = Files.list(IMAGE_DIRECTORY.resolve(property.getId().toString()))) {
+				assertThat(paths).isEmpty();
+			}
+		} finally {
+			jdbc.execute("ALTER TABLE property_image DROP CHECK chk_forced_property_image_failure");
+		}
 	}
 
 	@Test
