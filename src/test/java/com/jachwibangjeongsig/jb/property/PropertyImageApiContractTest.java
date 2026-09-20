@@ -34,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -122,6 +123,70 @@ class PropertyImageApiContractTest {
 	}
 
 	@Test
+	void adminReplacesImageWhileKeepingItsIdAndOrder() throws Exception {
+		JsonNode uploaded = response(upload(admin, property.getId(), image("first.png"))
+			.andExpect(status().isCreated()));
+		JsonNode original = uploaded.path("images").get(0);
+		UUID imageId = UUID.fromString(original.path("id").asString());
+		String originalUrl = original.path("url").asString();
+
+		var request = multipart("/api/properties/{propertyId}/images/{imageId}", property.getId(), imageId)
+			.file(new MockMultipartFile("file", "replacement.jpg", "image/jpeg", JPEG))
+			.header(HttpHeaders.AUTHORIZATION, bearer(admin))
+			.with(httpRequest -> {
+				httpRequest.setMethod("PUT");
+				return httpRequest;
+			});
+		mvc.perform(request)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value(imageId.toString()))
+			.andExpect(jsonPath("$.displayOrder").value(0))
+			.andExpect(jsonPath("$.url").value(endsWith(".jpg")));
+
+		mvc.perform(get(originalUrl)).andExpect(status().isNotFound());
+		assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM property_image", Long.class)).isOne();
+		try (var paths = Files.list(IMAGE_DIRECTORY.resolve(property.getId().toString()))) {
+			assertThat(paths).hasSize(1);
+		}
+	}
+
+	@Test
+	void adminDeletesImageAndCompactsFollowingDisplayOrders() throws Exception {
+		JsonNode uploaded = response(upload(admin, property.getId(), image("first.png"), image("second.png"),
+			image("third.png")).andExpect(status().isCreated()));
+		UUID middleImageId = UUID.fromString(uploaded.path("images").get(1).path("id").asString());
+		String deletedUrl = uploaded.path("images").get(1).path("url").asString();
+
+		mvc.perform(delete("/api/properties/{propertyId}/images/{imageId}", property.getId(), middleImageId)
+			.header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+			.andExpect(status().isNoContent());
+
+		mvc.perform(get(deletedUrl)).andExpect(status().isNotFound());
+		assertThat(jdbc.queryForList("SELECT display_order FROM property_image WHERE property_id = UUID_TO_BIN(?) "
+			+ "ORDER BY display_order", Integer.class, property.getId().toString())).containsExactly(0, 1);
+		try (var paths = Files.list(IMAGE_DIRECTORY.resolve(property.getId().toString()))) {
+			assertThat(paths).hasSize(2);
+		}
+	}
+
+	@Test
+	void replaceAndDeleteRequireAdminAndMatchingPropertyImage() throws Exception {
+		JsonNode uploaded = response(upload(admin, property.getId(), image("first.png"))
+			.andExpect(status().isCreated()));
+		UUID imageId = UUID.fromString(uploaded.path("images").get(0).path("id").asString());
+
+		mvc.perform(delete("/api/properties/{propertyId}/images/{imageId}", property.getId(), imageId))
+			.andExpect(status().isUnauthorized());
+		mvc.perform(delete("/api/properties/{propertyId}/images/{imageId}", property.getId(), imageId)
+			.header(HttpHeaders.AUTHORIZATION, bearer(ordinary)))
+			.andExpect(status().isForbidden());
+		mvc.perform(delete("/api/properties/{propertyId}/images/{imageId}", property.getId(), UUID.randomUUID())
+			.header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("PROPERTY_IMAGE_NOT_FOUND"));
+	}
+
+	@Test
 	void jpegAndWebpAreDetectedFromContentAndServedWithStoredTypes() throws Exception {
 		var result = upload(admin, property.getId(),
 			new MockMultipartFile("files", "wrong.bin", "application/octet-stream", JPEG),
@@ -201,6 +266,10 @@ class PropertyImageApiContractTest {
 
 	private MockMultipartFile image(String name) {
 		return new MockMultipartFile("files", name, "image/png", PNG);
+	}
+
+	private JsonNode response(ResultActions actions) throws Exception {
+		return json.readTree(actions.andReturn().getResponse().getContentAsString());
 	}
 
 	private String bearer(User user) {

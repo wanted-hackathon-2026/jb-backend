@@ -77,6 +77,12 @@ public class AuthConfig {
 				.requestMatchers(HttpMethod.POST, "/api/properties/*/images").access(
 					AuthorizationManagers.allOf(
 						profileAuthorizationManager, propertyAdminAuthorizationManager))
+				.requestMatchers(HttpMethod.PUT, "/api/properties/*/images/*").access(
+					AuthorizationManagers.allOf(
+						profileAuthorizationManager, propertyAdminAuthorizationManager))
+				.requestMatchers(HttpMethod.DELETE, "/api/properties/*/images/*").access(
+					AuthorizationManagers.allOf(
+						profileAuthorizationManager, propertyAdminAuthorizationManager))
 				.anyRequest().access(profileAuthorizationManager)
 			)
 			.oauth2ResourceServer(oauth -> oauth
