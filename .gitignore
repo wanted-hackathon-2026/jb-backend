@@ -42,8 +42,11 @@ out/
 !.env.example
 .claude.local.md
 
-# Local Google login test configuration
-tools/google-login-test/config.js
 .omc
 
 .DS_STORE
+
+# Downloaded public safety datasets and geocoded cache (not packaged in the app)
+/data/safety/
+/data/noise/
+/data/property-images/

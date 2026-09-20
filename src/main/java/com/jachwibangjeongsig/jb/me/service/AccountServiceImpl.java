@@ -1,4 +1,6 @@
 package com.jachwibangjeongsig.jb.me.service;
+import java.util.Locale;
+import org.hibernate.exception.ConstraintViolationException;
 import com.jachwibangjeongsig.jb.me.dto.AccountResponse;
 import com.jachwibangjeongsig.jb.me.exception.ApiException;
 import com.jachwibangjeongsig.jb.user.User;
@@ -36,10 +38,10 @@ public class AccountServiceImpl implements AccountService {
     }
     private boolean isNicknameConflict(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation) {
+            if (cause instanceof ConstraintViolationException violation) {
                 String constraint = violation.getConstraintName();
                 if (constraint != null && (constraint.equalsIgnoreCase("uk_users_nickname")
-                    || constraint.toLowerCase(java.util.Locale.ROOT).endsWith(".uk_users_nickname"))) return true;
+                    || constraint.toLowerCase(Locale.ROOT).endsWith(".uk_users_nickname"))) return true;
             }
         }
         return false;

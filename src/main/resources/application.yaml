@@ -15,6 +15,11 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
 server:
   port: 8080
 management:
@@ -39,6 +44,28 @@ auth:
 vworld:
   api-key: ${VWORLD_API_KEY}
 
+seoul:
+  sdot:
+    api-key: ${SEOUL_OPEN_API_KEY:}
+    base-url: ${SDOT_BASE_URL:http://openapi.seoul.go.kr:8088}
+    sensor-file: ${SDOT_SENSOR_FILE:data/noise/sensors.csv}
+    cache-seconds: ${SDOT_CACHE_SECONDS:3600}
+
+kakao:
+  local:
+    api-key: ${KAKAO_REST_API_KEY:}
+    base-url: ${KAKAO_LOCAL_BASE_URL:https://dapi.kakao.com}
+
+infrastructure:
+  bus-stop-file: ${BUS_STOP_FILE:data/infrastructure/bus-stops.csv}
+
+property:
+  image-directory: ${PROPERTY_IMAGE_DIRECTORY:data/property-images}
+
+swagger:
+  google-login:
+    enabled: ${SWAGGER_GOOGLE_LOGIN_ENABLED:false}
+
 llm:
-  api-key: ${OPENROUTER_API_KEY}
-  model: ${LLM_MODEL}
+  api-key: ${OPENROUTER_API_KEY:}
+  model: ${LLM_MODEL:openai/gpt-5-mini}

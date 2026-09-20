@@ -33,7 +33,8 @@ page 기본 0, 0 이상의 정수. size 기본 20, 1~100의 정수.
 200: content, page, size, totalElements, totalPages, last.
 빈 목록은 content=[], totalElements=0, totalPages=0, last=true이다.
 항목: favoriteId, createdAt, property.
-property 요약: id, name, address, roadAddress, propertyType, deposit, monthlyRent, exclusiveArea, floor, buildYear.
+property 요약: id, name, address, roadAddress, propertyType, leaseType, deposit, monthlyRent, exclusiveArea, floor, buildYear.
+leaseType: `JEONSE`(전세), `MONTHLY`(월세). 보증금·월세 단위는 만원이다.
 
 ### GET /api/me/favorites/{propertyId}
 

@@ -1,10 +1,13 @@
 package com.jachwibangjeongsig.jb.auth.exception;
 
+import java.util.Map;
+import org.springframework.http.MediaType;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -14,8 +17,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class AuthExceptionHandler {
 
 	@ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
-		HandlerMethodValidationException.class, MethodArgumentTypeMismatchException.class})
-	ResponseEntity<java.util.Map<String, Object>> invalidRequest(Exception exception, HttpServletRequest request) {
+		HandlerMethodValidationException.class, MethodArgumentTypeMismatchException.class,
+		MissingServletRequestParameterException.class})
+	ResponseEntity<Map<String, Object>> invalidRequest(Exception exception, HttpServletRequest request) {
 		return response(
 			HttpStatus.BAD_REQUEST,
 			"INVALID_REQUEST",
@@ -25,7 +29,7 @@ public class AuthExceptionHandler {
 	}
 
 	@ExceptionHandler(InvalidGoogleIdentityTokenException.class)
-	ResponseEntity<java.util.Map<String, Object>> invalidGoogleToken(
+	ResponseEntity<Map<String, Object>> invalidGoogleToken(
 		InvalidGoogleIdentityTokenException exception,
 		HttpServletRequest request
 	) {
@@ -38,7 +42,7 @@ public class AuthExceptionHandler {
 	}
 
 	@ExceptionHandler(InvalidRefreshTokenException.class)
-	ResponseEntity<java.util.Map<String, Object>> invalidRefreshToken(
+	ResponseEntity<Map<String, Object>> invalidRefreshToken(
 		InvalidRefreshTokenException exception,
 		HttpServletRequest request
 	) {
@@ -51,7 +55,7 @@ public class AuthExceptionHandler {
 	}
 
 	@ExceptionHandler(GoogleAuthenticationUnavailableException.class)
-	ResponseEntity<java.util.Map<String, Object>> googleUnavailable(
+	ResponseEntity<Map<String, Object>> googleUnavailable(
 		GoogleAuthenticationUnavailableException exception,
 		HttpServletRequest request
 	) {
@@ -63,14 +67,14 @@ public class AuthExceptionHandler {
 		);
 	}
 
-	private ResponseEntity<java.util.Map<String, Object>> response(
+	private ResponseEntity<Map<String, Object>> response(
 		HttpStatus status,
 		String code,
 		String detail,
 		HttpServletRequest request
 	) {
 		return ResponseEntity.status(status)
-			.contentType(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON)
+			.contentType(MediaType.APPLICATION_PROBLEM_JSON)
 			.body(AuthProblemDetails.response(status, code, detail, request));
 	}
 }

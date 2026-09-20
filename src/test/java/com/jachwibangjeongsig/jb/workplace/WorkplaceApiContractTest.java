@@ -4,11 +4,11 @@ import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
 import com.jachwibangjeongsig.jb.user.UserRole;
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
+import com.jachwibangjeongsig.jb.global.geocoding.Coordinates;
 import com.jachwibangjeongsig.jb.workplace.entity.Workplace;
-import com.jachwibangjeongsig.jb.workplace.exception.GeocodingUnavailableException;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingUnavailableException;
 import com.jachwibangjeongsig.jb.workplace.repository.WorkplaceRepository;
-import com.jachwibangjeongsig.jb.workplace.service.GeocodingClient;
+import com.jachwibangjeongsig.jb.global.geocoding.GeocodingClient;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,8 +46,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 	"auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
 	"auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
 	"vworld.api-key=test-vworld-api-key",
-	"llm.api-key=test-openrouter-api-key",
-	"llm.model=test-model",
 	"auth.cookie-secure=true",
 	"auth.allowed-origins=http://localhost:3000"
 })
@@ -185,6 +183,7 @@ class WorkplaceApiContractTest {
 			.provider("google")
 			.providerId(providerId)
 			.email(email)
+			.nickname(providerId)
 			.role(UserRole.USER)
 			.build());
 	}

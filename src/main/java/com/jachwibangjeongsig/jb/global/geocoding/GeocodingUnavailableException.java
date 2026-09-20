@@ -1,4 +1,4 @@
-package com.jachwibangjeongsig.jb.workplace.exception;
+package com.jachwibangjeongsig.jb.global.geocoding;
 
 public class GeocodingUnavailableException extends RuntimeException {
 

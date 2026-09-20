@@ -1,6 +1,5 @@
-package com.jachwibangjeongsig.jb.workplace.service;
+package com.jachwibangjeongsig.jb.global.geocoding;
 
-import com.jachwibangjeongsig.jb.workplace.dto.Coordinates;
 
 import java.util.Optional;
 

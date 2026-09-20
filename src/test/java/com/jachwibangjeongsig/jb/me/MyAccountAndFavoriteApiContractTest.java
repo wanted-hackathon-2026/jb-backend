@@ -1,5 +1,10 @@
 package com.jachwibangjeongsig.jb.me;
 
+import java.util.List;
+import java.util.concurrent.Callable;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import com.jachwibangjeongsig.jb.auth.service.JwtTokenService;
 import com.jachwibangjeongsig.jb.user.User;
 import com.jachwibangjeongsig.jb.user.UserRepository;
@@ -40,9 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "auth.google-client-id=test-google-client-id",
     "auth.access-token-secret=test-access-token-secret-with-at-least-32-bytes",
     "auth.refresh-token-secret=test-refresh-token-secret-with-at-least-32-bytes",
-    "vworld.api-key=test-vworld-api-key",
-    "llm.api-key=test-openrouter-api-key",
-    "llm.model=test-model"
+    "vworld.api-key=test-vworld-api-key"
 })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -56,7 +59,7 @@ class MyAccountAndFavoriteApiContractTest {
     @Autowired JwtTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
-    @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired PlatformTransactionManager transactionManager;
 
     User me;
     User other;
@@ -65,9 +68,9 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void independentEmailAndNicknameUpdatesDoNotOverwriteEachOther(boolean nicknameCommitsLast) {
-        var outer = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-        var inner = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-        inner.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        var outer = new TransactionTemplate(transactionManager);
+        var inner = new TransactionTemplate(transactionManager);
+        inner.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         outer.executeWithoutResult(status -> {
             User stale = users.findById(me.getId()).orElseThrow();
             inner.executeWithoutResult(innerStatus -> {
@@ -90,13 +93,14 @@ class MyAccountAndFavoriteApiContractTest {
         jdbc.update("DELETE FROM favorite");
         jdbc.update("DELETE FROM property");
         users.deleteAll();
-        me = user("me", null);
+        me = user("me", "내닉네임");
         other = user("other", "사용중닉네임");
         propertyId = property("테스트 매물");
     }
 
     @Test
     void myInformationIsIdentifiedByTokenAndIncompleteBeforeNicknameSetup() throws Exception {
+        incompleteProfile();
         as(me, get("/api/me").param("userId", other.getId().toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(me.getId().toString()))
@@ -126,6 +130,7 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "가", "가나다라마바사아자차카타파하가나"})
     void invalidNicknameDoesNotChangeStoredInformation(String nickname) throws Exception {
+        incompleteProfile();
         problem(nickname(nickname), 400, "INVALID_REQUEST", "/api/me");
         assertThat(users.findById(me.getId()).orElseThrow().getNickname()).isNull();
     }
@@ -133,6 +138,7 @@ class MyAccountAndFavoriteApiContractTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{\"nickname\":null}"})
     void nicknameMustBePresentAndNotNull(String body) throws Exception {
+        incompleteProfile();
         problem(as(me, patch("/api/me").contentType(APPLICATION_JSON).content(body)),
             400, "INVALID_REQUEST", "/api/me");
         assertThat(users.findById(me.getId()).orElseThrow().getNickname()).isNull();
@@ -175,6 +181,7 @@ class MyAccountAndFavoriteApiContractTest {
             .andExpect(jsonPath("$.content[0].property.address").value("지번 주소"))
             .andExpect(jsonPath("$.content[0].property.roadAddress").value("도로명 주소"))
             .andExpect(jsonPath("$.content[0].property.propertyType").value("원룸"))
+            .andExpect(jsonPath("$.content[0].property.leaseType").value("MONTHLY"))
             .andExpect(jsonPath("$.content[0].property.deposit").value(1000))
             .andExpect(jsonPath("$.content[0].property.monthlyRent").value(50))
             .andExpect(jsonPath("$.content[0].property.exclusiveArea").value(23.5))
@@ -216,6 +223,7 @@ class MyAccountAndFavoriteApiContractTest {
             .andExpect(jsonPath("$.property.sggCode").value("11680"))
             .andExpect(jsonPath("$.property.umdName").value("역삼동"))
             .andExpect(jsonPath("$.property.propertyType").value("원룸"))
+            .andExpect(jsonPath("$.property.leaseType").value("MONTHLY"))
             .andExpect(jsonPath("$.property.floor").value(3))
             .andExpect(jsonPath("$.property.totalFloors").value(10))
             .andExpect(jsonPath("$.property.buildYear").value(2020))
@@ -257,7 +265,7 @@ class MyAccountAndFavoriteApiContractTest {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            java.util.concurrent.Callable<Integer> request = () -> {
+            Callable<Integer> request = () -> {
                 ready.countDown();
                 if (!start.await(10, TimeUnit.SECONDS)) throw new AssertionError("Start barrier timed out");
                 return mvc.perform(post("/api/me/favorites").header("Authorization", "Bearer " + token)
@@ -270,7 +278,7 @@ class MyAccountAndFavoriteApiContractTest {
             } finally {
                 start.countDown();
             }
-            assertThat(java.util.List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
                 .containsExactlyInAnyOrder(201, 409);
         }
         assertThat(countFavorites(me)).isEqualTo(1);
@@ -307,6 +315,7 @@ class MyAccountAndFavoriteApiContractTest {
 
     @Test
     void allSixEndpointsRequireAValidAccessToken() throws Exception {
+        incompleteProfile();
         for (String token : new String[] {null, "invalid-token", tokens.issue(me, UUID.randomUUID(),
             Instant.now().minusSeconds(3600)).accessToken()}) {
             for (MockHttpServletRequestBuilder request : new MockHttpServletRequestBuilder[] {
@@ -326,6 +335,11 @@ class MyAccountAndFavoriteApiContractTest {
     private User user(String identity, String nickname) {
         return users.save(User.builder().provider("google").providerId(identity)
             .email(identity + "@example.com").nickname(nickname).build());
+    }
+
+    private void incompleteProfile() {
+        me.updateNickname(null);
+        users.saveAndFlush(me);
     }
 
     private ResultActions as(User user, MockHttpServletRequestBuilder request) throws Exception {
@@ -359,10 +373,10 @@ class MyAccountAndFavoriteApiContractTest {
         UUID id = UUID.randomUUID();
         jdbc.update("""
             INSERT INTO property (id, name, address, road_address, sgg_code, umd_name, lat, lng,
-                property_type, deposit, monthly_rent, exclusive_area, floor, total_floors, build_year,
+                property_type, lease_type, deposit, monthly_rent, exclusive_area, floor, total_floors, build_year,
                 direction, description, created_at, updated_at)
             VALUES (?, ?, '지번 주소', '도로명 주소', '11680', '역삼동', 37.1234, 127.1234,
-                '원룸', 1000, 50, 23.5, 3, 10, 2020, '남향', '매물 설명',
+                '원룸', 'MONTHLY', 1000, 50, 23.5, 3, 10, 2020, '남향', '매물 설명',
                 '2026-09-16 12:00:00', '2026-09-16 12:00:00')
             """, binary(id), name);
         return id;

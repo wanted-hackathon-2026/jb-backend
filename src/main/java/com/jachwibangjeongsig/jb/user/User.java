@@ -1,5 +1,6 @@
 package com.jachwibangjeongsig.jb.user;
 
+import org.hibernate.annotations.DynamicUpdate;
 import com.jachwibangjeongsig.jb.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -19,7 +20,7 @@ import java.util.UUID;
 
 @Getter
 @Entity
-@org.hibernate.annotations.DynamicUpdate
+@DynamicUpdate
 @Table(
 	name = "users",
 	uniqueConstraints = @UniqueConstraint(

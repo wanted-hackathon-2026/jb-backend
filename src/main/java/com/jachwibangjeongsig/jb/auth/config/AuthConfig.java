@@ -1,6 +1,9 @@
 package com.jachwibangjeongsig.jb.auth.config;
 
+import org.springframework.security.authorization.AuthorizationManagers;
 import com.jachwibangjeongsig.jb.auth.exception.AuthAuthenticationEntryPoint;
+import com.jachwibangjeongsig.jb.auth.exception.AuthAccessDeniedHandler;
+import com.jachwibangjeongsig.jb.property.security.PropertyAdminAuthorizationManager;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +38,10 @@ public class AuthConfig {
 	SecurityFilterChain securityFilterChain(
 		HttpSecurity http,
 		JwtDecoder accessTokenDecoder,
-		AuthenticationEntryPoint authenticationEntryPoint
+		AuthenticationEntryPoint authenticationEntryPoint,
+		AuthAccessDeniedHandler accessDeniedHandler,
+		PropertyAdminAuthorizationManager propertyAdminAuthorizationManager,
+		ProfileAuthorizationManager profileAuthorizationManager
 	) throws Exception {
 		http
 			.csrf(csrf -> csrf.disable())
@@ -44,6 +50,10 @@ public class AuthConfig {
 			.formLogin(form -> form.disable())
 			.httpBasic(basic -> basic.disable())
 			.logout(logout -> logout.disable())
+			.exceptionHandling(exceptions -> exceptions
+				.authenticationEntryPoint(authenticationEntryPoint)
+				.accessDeniedHandler(accessDeniedHandler)
+			)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.POST,
 					"/api/auth/login/google",
@@ -52,11 +62,22 @@ public class AuthConfig {
 				).permitAll()
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-				.anyRequest().authenticated()
+				.requestMatchers(HttpMethod.GET, "/api/property-images/**").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/properties/map", "/api/properties/*").permitAll()
+				.requestMatchers(HttpMethod.GET, "/api/me").authenticated()
+				.requestMatchers(HttpMethod.PATCH, "/api/me").authenticated()
+				.requestMatchers(HttpMethod.POST, "/api/properties").access(
+					AuthorizationManagers.allOf(
+						profileAuthorizationManager, propertyAdminAuthorizationManager))
+				.requestMatchers(HttpMethod.POST, "/api/properties/*/images").access(
+					AuthorizationManagers.allOf(
+						profileAuthorizationManager, propertyAdminAuthorizationManager))
+				.anyRequest().access(profileAuthorizationManager)
 			)
 			.oauth2ResourceServer(oauth -> oauth
 				.jwt(jwt -> jwt.decoder(accessTokenDecoder))
 				.authenticationEntryPoint(authenticationEntryPoint)
+				.accessDeniedHandler(accessDeniedHandler)
 			);
 		return http.build();
 	}

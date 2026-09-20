@@ -2,6 +2,11 @@ services:
   app:
     # 배포 워크플로우가 커밋 SHA를 넘김. 서버에서 수동 실행할 땐 latest로 폴백.
     image: ${APP_IMAGE:-ghcr.io/wanted-hackathon-2026/jb-backend:latest}
+    volumes:
+      - ./data/safety:/app/data/safety:ro
+      - ./data/noise:/app/data/noise:ro
+      - ./data/infrastructure:/app/data/infrastructure:ro
+      - ./data/property-images:/app/data/property-images
     environment:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -12,6 +17,13 @@ services:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS}
       VWORLD_API_KEY: ${VWORLD_API_KEY}
+      SAFETY_CSV_DIRECTORY: /app/data/safety
+      SEOUL_OPEN_API_KEY: ${SEOUL_OPEN_API_KEY}
+      SDOT_SENSOR_FILE: /app/data/noise/sensors.csv
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      BUS_STOP_FILE: /app/data/infrastructure/bus-stops.csv
+      PROPERTY_IMAGE_DIRECTORY: /app/data/property-images
+
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
