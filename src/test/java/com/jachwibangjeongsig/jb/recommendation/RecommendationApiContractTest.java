@@ -147,6 +147,70 @@ class RecommendationApiContractTest {
 	}
 
 	@Test
+	void listsOnlyTheOwnersRecommendationHistoryNewestFirstWithPagination() throws Exception {
+		String older = request(bearer(owner), body())
+			.andReturn().getResponse().getContentAsString()
+			.replaceAll(".*\"recommendationId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+		String newer = request(bearer(owner), body())
+			.andReturn().getResponse().getContentAsString()
+			.replaceAll(".*\"recommendationId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+		jdbc.update("UPDATE recommendation SET requested_at = ? WHERE id = UUID_TO_BIN(?)",
+			LocalDateTime.of(2026, 9, 19, 10, 0), older);
+		jdbc.update("UPDATE recommendation SET requested_at = ? WHERE id = UUID_TO_BIN(?)",
+			LocalDateTime.of(2026, 9, 20, 10, 0), newer);
+		request(bearer(stranger), guestBody()).andExpect(status().isAccepted());
+
+		mvc.perform(get("/api/recommendations").param("size", "1")
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].recommendationId").value(newer))
+			.andExpect(jsonPath("$.content[0].status").value("COMPLETED"))
+			.andExpect(jsonPath("$.content[0].requestedAt").isNotEmpty())
+			.andExpect(jsonPath("$.content[0].workplaceName").value("본사"))
+			.andExpect(jsonPath("$.content[0].workplaceRoadAddress").value("서울 강남구 강남대로 1"))
+			.andExpect(jsonPath("$.content[0].transportType").value("TRANSIT"))
+			.andExpect(jsonPath("$.content[0].maxCommuteMinutes").value(30))
+			.andExpect(jsonPath("$.page").value(0))
+			.andExpect(jsonPath("$.size").value(1))
+			.andExpect(jsonPath("$.totalElements").value(2))
+			.andExpect(jsonPath("$.totalPages").value(2))
+			.andExpect(jsonPath("$.last").value(false));
+
+		mvc.perform(get("/api/recommendations").param("page", "1").param("size", "1")
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content[0].recommendationId").value(older))
+			.andExpect(jsonPath("$.last").value(true));
+	}
+
+	@Test
+	void guestRecommendationHistoryRequiresAndUsesItsClientSession() throws Exception {
+		String mine = "guest-history-session-token-with-enough-entropy-123456789";
+		String other = "other-history-session-token-with-enough-entropy-12345678";
+		String recommendationId = guestRequest(mine, guestBody())
+			.andReturn().getResponse().getContentAsString()
+			.replaceAll(".*\"recommendationId\"\\s*:\\s*\"([^\"]+)\".*", "$1");
+		guestRequest(other, guestBody()).andExpect(status().isAccepted());
+
+		mvc.perform(get("/api/recommendations").header(CLIENT_SESSION, mine))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.content.length()").value(1))
+			.andExpect(jsonPath("$.content[0].recommendationId").value(recommendationId))
+			.andExpect(jsonPath("$.totalElements").value(1));
+
+		mvc.perform(get("/api/recommendations"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void invalidRecommendationHistoryPageParametersReturnBadRequest() throws Exception {
+		mvc.perform(get("/api/recommendations").param("size", "101")
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void propertiesOutsideTheCommuteRadiusNeverReachTheModel() throws Exception {
 		saveProperty("가까운 원룸", 1, 1000, 50);
 		saveProperty("아주 먼 원룸", 60, 1000, 50);

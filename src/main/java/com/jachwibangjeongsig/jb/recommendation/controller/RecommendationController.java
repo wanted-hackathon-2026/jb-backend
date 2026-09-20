@@ -2,6 +2,7 @@ package com.jachwibangjeongsig.jb.recommendation.controller;
 
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationAcceptedResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationCreateRequest;
+import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationHistoryResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendationStatusResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendedPropertyDetailResponse;
 import com.jachwibangjeongsig.jb.recommendation.dto.RecommendedPropertyResponse;
@@ -10,6 +11,8 @@ import com.jachwibangjeongsig.jb.recommendation.exception.ClientSessionRequiredE
 import com.jachwibangjeongsig.jb.recommendation.service.RecommendationOwner;
 import com.jachwibangjeongsig.jb.recommendation.service.RecommendationService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -50,6 +54,15 @@ public class RecommendationController {
 		return ResponseEntity.status(HttpStatus.ACCEPTED)
 			.body(RecommendationAcceptedResponse.from(
 				recommendationService.request(ownerForRequest(jwt, clientSession), body)));
+	}
+
+	@GetMapping
+	public RecommendationHistoryResponse history(
+		@RequestParam(defaultValue = "0") @Min(0) int page,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+		@AuthenticationPrincipal Jwt jwt,
+		@RequestHeader(value = CLIENT_SESSION_HEADER, required = false) String clientSession) {
+		return recommendationService.history(owner(jwt, clientSession), page, size);
 	}
 
 	@GetMapping("/{recommendationId}")
