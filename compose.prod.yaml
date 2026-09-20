@@ -6,6 +6,7 @@ services:
       - ./data/safety:/app/data/safety:ro
       - ./data/noise:/app/data/noise:ro
       - ./data/infrastructure:/app/data/infrastructure:ro
+      - ./data/property-images:/app/data/property-images
     environment:
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
@@ -21,6 +22,7 @@ services:
       SDOT_SENSOR_FILE: /app/data/noise/sensors.csv
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       BUS_STOP_FILE: /app/data/infrastructure/bus-stops.csv
+      PROPERTY_IMAGE_DIRECTORY: /app/data/property-images
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
     ports:
       - "80:8080"

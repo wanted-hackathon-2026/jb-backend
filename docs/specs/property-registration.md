@@ -21,7 +21,9 @@ JWT의 `role` 클레임은 권한 판단에 사용하지 않는다. 역할 변�
   "deposit": 1000,
   "monthlyRent": 50,
   "exclusiveArea": 23.50,
+  "supplyArea": 33.00,
   "floor": 3,
+  "bathroomCount": 1,
   "totalFloors": 4,
   "buildYear": 2014,
   "direction": "남향",
@@ -42,8 +44,10 @@ JWT의 `role` 클레임은 권한 판단에 사용하지 않는다. 역할 변�
 | propertyType | 예 | 공백 불가, 최대 20자, 별도 허용값 목록 없음 |
 | leaseType | 예 | `JEONSE`(전세) 또는 `MONTHLY`(월세), 대문자 문자열만 허용 |
 | deposit / monthlyRent | 예 | 0 이상, Java int 범위의 정수 |
-| exclusiveArea | 아니오 | 양수, 정수부 최대 6자리·소수부 최대 2자리 |
+| exclusiveArea | 아니오 | 양수, 정수부 최대 6자리·소수부 최대 2자리, 단위 ㎡ |
+| supplyArea | 아니오 | 양수, 정수부 최대 6자리·소수부 최대 2자리, 단위 ㎡ (2026-09-20 추가) |
 | floor | 아니오 | Java int 범위의 정수, 지하층을 위해 음수 허용 |
+| bathroomCount | 아니오 | Java int 범위의 양의 정수 (2026-09-20 추가) |
 | totalFloors / buildYear | 아니오 | Java int 범위의 양의 정수 |
 | direction | 아니오 | 공백 불가, 최대 10자, 별도 허용값 목록 없음 |
 | description | 아니오 | UTF-8 TEXT 저장 한도를 안전하게 지키도록 최대 16,383자 |
