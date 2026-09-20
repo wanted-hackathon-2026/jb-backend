@@ -35,7 +35,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -55,6 +57,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class WorkplaceApiContractTest {
 
 	private static final Coordinates SUWON = new Coordinates(37.279609852101984, 127.04339808904444);
+	private static final Coordinates SEOUL = new Coordinates(37.56661, 126.97839);
 	private static final String BODY = """
 		{"name":"회사","roadAddress":"경기 수원시 팔달구 월드컵로 205"}
 		""";
@@ -86,6 +89,7 @@ class WorkplaceApiContractTest {
 		userRepository.deleteAll();
 		geocoding.result = Optional.of(SUWON);
 		geocoding.failure = null;
+		geocoding.calls = 0;
 		owner = saveUser("owner@example.com", "google-sub-owner");
 	}
 
@@ -167,6 +171,141 @@ class WorkplaceApiContractTest {
 			.andExpect(jsonPath("$.length()").value(0));
 	}
 
+	@Test
+	void updatesOnlyTheFieldsPresentInTheRequest() throws Exception {
+		UUID id = createdId(owner);
+
+		patchWorkplace(owner, id, """
+			{"name":"본사"}
+			""")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value(id.toString()))
+			.andExpect(jsonPath("$.name").value("본사"))
+			.andExpect(jsonPath("$.roadAddress").value("경기 수원시 팔달구 월드컵로 205"))
+			.andExpect(jsonPath("$.lat").value(SUWON.lat()));
+	}
+
+	@Test
+	void regeocodesOnlyWhenTheRoadAddressActuallyChanges() throws Exception {
+		UUID id = createdId(owner);
+		geocoding.calls = 0;
+
+		patchWorkplace(owner, id, """
+			{"roadAddress":"경기 수원시 팔달구 월드컵로 205"}
+			""")
+			.andExpect(status().isOk());
+		assertThat(geocoding.calls).isZero();
+
+		geocoding.result = Optional.of(SEOUL);
+		patchWorkplace(owner, id, """
+			{"roadAddress":"서울 중구 세종대로 110"}
+			""")
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.roadAddress").value("서울 중구 세종대로 110"))
+			.andExpect(jsonPath("$.lat").value(SEOUL.lat()))
+			.andExpect(jsonPath("$.lng").value(SEOUL.lng()));
+		assertThat(geocoding.calls).isEqualTo(1);
+	}
+
+	@Test
+	void rejectsABlankNameOnUpdate() throws Exception {
+		UUID id = createdId(owner);
+
+		patchWorkplace(owner, id, """
+			{"name":"   "}
+			""")
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+		assertThat(workplaceRepository.findById(id).orElseThrow().getName()).isEqualTo("회사");
+	}
+
+	@Test
+	void reportsBadRequestWhenTheNewAddressCannotBeGeocoded() throws Exception {
+		UUID id = createdId(owner);
+		geocoding.result = Optional.empty();
+
+		patchWorkplace(owner, id, """
+			{"roadAddress":"없는 주소"}
+			""")
+			.andExpect(status().isBadRequest())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("ADDRESS_NOT_GEOCODABLE"));
+
+		assertThat(workplaceRepository.findById(id).orElseThrow().getRoadAddress())
+			.isEqualTo("경기 수원시 팔달구 월드컵로 205");
+	}
+
+	@Test
+	void deletesTheCallersOwnWorkplace() throws Exception {
+		UUID id = createdId(owner);
+
+		mockMvc.perform(delete("/api/workplaces/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isNoContent());
+
+		assertThat(workplaceRepository.count()).isZero();
+	}
+
+	@Test
+	void hidesWorkplacesOwnedBySomeoneElseBehindNotFound() throws Exception {
+		UUID id = createdId(owner);
+		User stranger = saveUser("stranger@example.com", "google-sub-stranger");
+
+		patchWorkplace(stranger, id, """
+			{"name":"탈취"}
+			""")
+			.andExpect(status().isNotFound())
+			.andExpect(header().string("Content-Type", "application/problem+json"))
+			.andExpect(jsonPath("$.code").value("WORKPLACE_NOT_FOUND"));
+
+		mockMvc.perform(delete("/api/workplaces/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(stranger)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("WORKPLACE_NOT_FOUND"));
+
+		assertThat(workplaceRepository.count()).isEqualTo(1);
+		assertThat(workplaceRepository.findById(id).orElseThrow().getName()).isEqualTo("회사");
+	}
+
+	@Test
+	void reportsNotFoundForAWorkplaceThatDoesNotExist() throws Exception {
+		mockMvc.perform(delete("/api/workplaces/{id}", UUID.randomUUID())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("WORKPLACE_NOT_FOUND"));
+	}
+
+	@Test
+	void requiresAuthenticationForUpdateAndDelete() throws Exception {
+		UUID id = createdId(owner);
+
+		mockMvc.perform(patch("/api/workplaces/{id}", id)
+				.contentType(APPLICATION_JSON)
+				.content("""
+					{"name":"본사"}
+					"""))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_ACCESS_TOKEN"));
+
+		mockMvc.perform(delete("/api/workplaces/{id}", id))
+			.andExpect(status().isUnauthorized());
+
+		assertThat(workplaceRepository.count()).isEqualTo(1);
+	}
+
+	private UUID createdId(User user) throws Exception {
+		create(user, BODY).andExpect(status().isCreated());
+		return workplaceRepository.findAll().getLast().getId();
+	}
+
+	private ResultActions patchWorkplace(User user, UUID id, String body) throws Exception {
+		return mockMvc.perform(patch("/api/workplaces/{id}", id)
+			.header(HttpHeaders.AUTHORIZATION, bearer(user))
+			.contentType(APPLICATION_JSON)
+			.content(body));
+	}
+
 	private ResultActions create(User user, String body) throws Exception {
 		return mockMvc.perform(post("/api/workplaces")
 			.header(HttpHeaders.AUTHORIZATION, bearer(user))
@@ -193,9 +332,11 @@ class WorkplaceApiContractTest {
 
 		Optional<Coordinates> result = Optional.empty();
 		RuntimeException failure;
+		int calls;
 
 		@Override
 		public Optional<Coordinates> locate(String roadAddress) {
+			calls++;
 			if (failure != null) {
 				throw failure;
 			}
